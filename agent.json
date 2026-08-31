@@ -1,0 +1,131 @@
+{
+  "$schema": "http://desirecore/schemas/agent.json",
+  "version": "1.0.0",
+  "name": "合同输入治理官",
+  "description": "合同审查流水线的第一道闸门。执行 5 分钟硬校验与四大冻结（主版本 / 附件清单 / 页码范围 / 签章状态），对占位符、缺失附件、签署状态未确认、页码断裂、主体名称不一致直接阻断，绝不把带病材料放进下游。",
+  "author": "DesireCore",
+  "avatar": {
+    "char": "闸",
+    "color": "purple"
+  },
+  "llm": {
+    "routingMode": "smart",
+    "smart": {
+      "profile": {
+        "tier": "balanced",
+        "requiredCapabilities": [
+          "tool_use",
+          "long_context"
+        ],
+        "reasoning": "medium"
+      }
+    },
+    "maxRetryDelayMs": 32000
+  },
+  "capabilities": [
+    "contract-intake",
+    "contract-review",
+    "input-governance",
+    "document-completeness-check",
+    "attachment-manifest-audit",
+    "signature-status-verification",
+    "pagination-integrity-check",
+    "version-matrix-alignment",
+    "legal-document-triage"
+  ],
+  "trigger_patterns": [
+    "合同",
+    "协议",
+    "合同审查",
+    "合同受理",
+    "输入治理",
+    "准入校验",
+    "预检",
+    "附件清单",
+    "签章",
+    "用印",
+    "页码",
+    "版本矩阵",
+    "版本冻结",
+    "contract",
+    "agreement",
+    "contract review",
+    "contract intake",
+    "input governance",
+    "completeness check",
+    "attachment manifest",
+    "signature status",
+    "pagination",
+    "version matrix"
+  ],
+  "accepts_handoff": true,
+  "accepts_messages": true,
+  "max_concurrent_sessions": 3,
+  "command_authority": {
+    "enabled": true,
+    "allowed_targets": [
+      "contract-review-lead",
+      "clause-extractor"
+    ]
+  },
+  "default_enabled": {
+    "skills": [
+      "contract-intake-gate"
+    ],
+    "tools": []
+  },
+  "tool_permissions": {
+    "allowed": [
+      "Read",
+      "Ls",
+      "Glob",
+      "Grep",
+      "Write",
+      "Edit",
+      "Skill",
+      "MathCalc",
+      "GenerateUUID",
+      "UnderstandImage",
+      "AskUserQuestion",
+      "Delegate",
+      "SendMessage",
+      "FileDigest"
+    ],
+    "denied": [
+      "Bash",
+      "PowerShell",
+      "TerminalControl",
+      "HttpRequest",
+      "WebFetch",
+      "WebSearch",
+      "ComputeCredential",
+      "ControlDesireCoreGui",
+      "BrowserTakeover",
+      "RecallConversation",
+      "spawn_agent"
+    ]
+  },
+  "network_security": {
+    "enableSsrfProtection": true
+  },
+  "file_security": {
+    "restrictToWorkDirs": true
+  },
+  "compute_credentials": {
+    "allowed_providers": []
+  },
+  "tools": {
+    "ask_user_question": {
+      "wait_mode": "always_wait"
+    }
+  },
+  "env": {
+    "enabled": true,
+    "includeWeekday": true,
+    "includeLocalTime": true,
+    "includeSessionStart": true,
+    "includeOs": false,
+    "includeRuntime": false,
+    "includeManagedRuntimes": false
+  }
+}

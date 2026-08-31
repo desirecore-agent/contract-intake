@@ -1,0 +1,9 @@
+# 由 initAgentRepo 自动生成
+# Agent 间消息收件箱:运行时状态,不入版本
+inbox/
+
+# 日志与缓存
+*.log
+.cache/
+.DS_Store
+Thumbs.db
