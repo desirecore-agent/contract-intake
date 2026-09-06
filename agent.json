@@ -64,8 +64,8 @@
   "command_authority": {
     "enabled": true,
     "allowed_targets": [
-      "contract-review-lead",
-      "clause-extractor"
+      "he-tong-shen-cha-tong-chou-guan",
+      "tiao-kuan-jie-gou-hua-guan"
     ]
   },
   "default_enabled": {
