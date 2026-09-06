@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.0
+version: 1.0.1
 type: procedural
 risk_level: low
 status: enabled
@@ -30,8 +30,8 @@ requires:
     - GenerateUUID
 metadata:
   author: DesireCore
-  version: 1.0.0
-  updated_at: '2026-08-31'
+  version: 1.0.1
+  updated_at: '2026-09-06'
 ---
 
 # 合同输入治理闸门
@@ -109,6 +109,13 @@ metadata:
    - `single` —— 单一版本受理
    - `version_comparison` —— 同一合同的两个及以上版本同时提交（要求做版本对照）
 4. 用 `GenerateUUID` 生成 `intake_id`，格式 `INTAKE-<YYYYMMDD>-<uuid 前 8 位>`。
+
+**“组成合同的文件”与附件清单的边界**：正文以“组成本合同的文件包括……”列举采购文件、
+答疑/更正公告、中标公告、响应文件、补充协议等程序性材料时，如果没有显式的“附件清单 / 合同附件 /
+Exhibit / Schedule”章节和附件编号，这些材料只是正文引用的组成材料。应记录为
+`SCOPE-ATTACHMENT-BODY-ABSENT` 或 `SCOPE-ATTACHMENT-VERSION-UNCOVERED`，不得因为材料
+未随正文提交而创建 `BLK-ATTACHMENT-MISSING`。`BLK-ATTACHMENT-MISSING` 只适用于正文明确引用
+某个编号/名称的附件，而正式附件清单中没有对应条目（S4 R1）。
 
 **命中什么算失败**
 
@@ -274,6 +281,9 @@ blocks:
 > 不是附件文件本身。只在 `scope` 里如实登记 `delivered: false`，并让下游把相关检查项留白为
 > `not_covered`。
 
+> ⚠️ **程序性组成材料也适用 R7。**“组成合同的文件”条款本身不是附件清单；没有附件编号的
+> 采购文件/响应文件/补充协议只形成范围事实，不影响门禁结论。不要把 `SCOPE-*` 升格为 `BLK-*`。
+
 > ⚠️ **R8 是"差异为 0"陷阱的唯一防线。**主文本逐字相同、diff 为零时，
 > 系统会默认"附件也没变"从而整段跳过——而附件恰恰是从 `SLA-v1.2` 换成了 `SLA-v2.0`。
 > 所以 R8 **不看 `body_diff_count`，无条件执行**。
@@ -410,11 +420,18 @@ blocks:
    `\*\*\*\*@example.com`（邮箱）中的星号是**已填写并脱敏**的真实数据，不是待填空位。
    **把脱敏掩码判为占位符并阻断，是最典型的误报。**判据：掩码两侧有真实数据片段（前缀 + 后缀），
    而占位符两侧没有——`____________` 前后是"开户银行："和空行。
-2. Markdown 表格分隔行 `|---|---|` 与水平线 `---` **不是** `_{2,}` 的命中，模式只匹配下划线。
-3. 正常的 Markdown 链接 `[文本](url)` 不命中方括号模式——方括号模式要求括号内含金额/价格/日期等字段词。
-4. 罗马数字 `XX`、型号编码中的 `XXX`（如 `Model-XXX-2026` 且上下文为产品型号）不算留白；
+2. **只扫描实际选定的分支。**争议解决条款常写成“按以下第（①）项方式处理：①……仲裁；②……法院”。
+   若已明确选择①，只对①分支检查空字段；未选中的②分支保留模板空白不构成
+   `placeholder-unfilled`，也不构成签章或受理阻断。只有在材料声明两个分支均适用，或所选分支
+   本身留空时，才按空字段处理。
+3. Markdown 表格分隔行 `|---|---|` 与水平线 `---` **不是** `_{2,}` 的命中，模式只匹配下划线。
+4. 正常的 Markdown 链接 `[文本](url)` 不命中方括号模式——方括号模式要求括号内含金额/价格/日期等字段词。
+5. 罗马数字 `XX`、型号编码中的 `XXX`（如 `Model-XXX-2026` 且上下文为产品型号）不算留白；
    `X{3,}` 只在**独立成词且处于应填值的位置**时才命中。
-5. 条文中作为示例出现的占位符（前后有"例如""形如""格式为"）记 `FLG-PLACEHOLDER-ILLUSTRATIVE`，不阻断。
+6. 条文中作为示例出现的占位符（前后有"例如""形如""格式为"）记 `FLG-PLACEHOLDER-ILLUSTRATIVE`，不阻断。
+7. **语义不确定不是词法占位符。**“买方所在地仲裁机构”“有管辖权的法院”等已填入的泛化描述
+   不是 `$X`、下划线或待定字段，不得在 S6 生成 `BLK-PLACEHOLDER`。这类条款若需要具体化，
+   在门禁通过后交给法域/风险 Agent 作为实质风险；受理 Agent 只记录原文，不提前替下游作法律裁决。
 
 > ⚠️ 命中任一模式后，**先过一遍上述排除规则再定性**。占位符检查是本技能误报率最高的一步，
 > 因为它是纯字符匹配，而"是不是占位符"要看语义位置。
@@ -589,7 +606,7 @@ flags:
 
 ```yaml
 version_matrix:
-  skill_version:             {current: "1.0.0",      expected: "1.0.0",  aligned: true}
+  skill_version:             {current: "1.0.1",      expected: "1.0.1",  aligned: true}
   server_version:            {current: "10.0.133",   expected: "10.0.133", aligned: true}
   knowledge_base_version:    {current: "2026-07-18", expected: "2026-08-20", aligned: false}
   jurisdiction_pack_version: {current: "us-v2",      expected: "cn-v3",  aligned: false}
