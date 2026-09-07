@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.1
+version: 1.0.2
 type: procedural
 risk_level: low
 status: enabled
@@ -30,8 +30,8 @@ requires:
     - GenerateUUID
 metadata:
   author: DesireCore
-  version: 1.0.1
-  updated_at: '2026-09-06'
+  version: 1.0.2
+  updated_at: '2026-09-07'
 ---
 
 # 合同输入治理闸门
@@ -47,6 +47,19 @@ metadata:
 2. **阻断即拒绝**。命中任一 `BLK-*` 编码，最终结论只能是 `blocked`（拒绝），且**不得调用 Delegate / SendMessage 向下游交接**，也不得输出条款清单或风险清单。
 3. **没检查到就显式留白**。检查矩阵里每一项都必须有状态；未覆盖写 `not_covered`，不得因为没提就当 `pass`。
 4. **四大冻结未全部成立时，禁止输出任何"一致 / 无差异 / 差异为 0"结论。**
+
+5. **结构化产物必须先保证 YAML 语法，再谈业务结论。** 机器消费的 `intake.yaml` 与回执
+   只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
+   或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
+   禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
+6. **回读声明必须有工具证据。** `Read` 只能证明文件内容已回读，不能证明 YAML 可解析。
+   本 Agent 的工具权限没有 YAML 解析器时，必须明确写“已回读，语法未由解析器验证”，不得
+   声称“YAML 可解析/通过 safe_load”；应在回执中保留待外部验证标记 `yaml_unverified`，并
+   将受影响结论降为 `conditional`，不得发送 `passed`。若未来环境提供专用 YAML 校验工具，
+   只有该工具返回成功后才可移除 `yaml_unverified`。
+7. **写入前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
+   等自由文本逐个检查引号配对与缩进；无法安全编码时用块标量，不得为了省字删掉证据或改写
+   原文。写入后再次 `Read`，保持 `input_file.absolute_path`、SHA 和所有门禁字段不变。
 
 ---
 
