@@ -1,0 +1,18 @@
+contract_intake_receipt:
+  intake_id: INTAKE-COMPLETE-MANIFEST
+  skill: contract-intake-gate@1.0.3
+  verdict: passed
+  verdict_label: 通过
+  freeze:
+    attachment_manifest:
+      frozen: true
+      declared:
+        - no: 附件一
+          name: 服务说明
+          version: V1.0
+          doc_no: DEMO-SOW-1
+  flags: []
+  blocks: []
+  handoff:
+    to: clause-extractor
+    pending: []

@@ -1,0 +1,47 @@
+contract_intake_receipt:
+  intake_id: INTAKE-R02-MANIFEST-INCOMPLETE
+  skill: contract-intake-gate@1.0.3
+  verdict: conditional
+  verdict_label: 条件通过
+  freeze:
+    attachment_manifest:
+      frozen: false
+      declared: null
+      authority: '正文第 13.3 条指定另附《合同附件目录》为完整附件清单'
+  all_frozen: false
+  flags:
+    - code: FLG-ATTACHMENT-MANIFEST-INCOMPLETE
+      gate_reason_id: attachment-manifest-incomplete
+      severity: flag
+      clause: '13.3'
+      evidence:
+        part: body
+        page: 7
+        quote: '完整附件清单见另附《合同附件目录》'
+      finding: 权威附件清单未随本次材料送达，无法冻结完整 declared 集合
+      action: 补齐权威附件清单后重新确认附件范围
+  blocks: []
+  handoff:
+    to: clause-extractor
+    from: contract-intake
+    intake_id: INTAKE-R02-MANIFEST-INCOMPLETE
+    receipt_path: C:/workspace/contract-review/R02/intake/INTAKE-R02-MANIFEST-INCOMPLETE.receipt.yaml
+    object:
+      contract_object_id: R02-DEMO-2026-001
+      object_title: R02 附件清单不完整合同
+      submission_mode: single
+    confirmed:
+      - 正文、页码范围与签章状态已冻结；附件清单完整集合尚未取得
+    scope:
+      in_scope:
+        - 条款抽取（含附件相关条款）
+      out_of_scope:
+        - 风险打分
+      frozen_baseline:
+        attachment_manifest: not_available
+    pending:
+      - id: PEND-001
+        from_flag: FLG-ATTACHMENT-MANIFEST-INCOMPLETE
+        must_escalate: true
+        statement: 未取得权威附件清单，未知附件不得视为已覆盖
+        required_downstream_action: 人工补齐并确认权威附件清单；未知附件相关检查项标为 not_covered，不得推测

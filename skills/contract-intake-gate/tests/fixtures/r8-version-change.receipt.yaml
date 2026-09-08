@@ -1,0 +1,25 @@
+contract_intake_receipt:
+  intake_id: INTAKE-R8-VERSION-CHANGE
+  skill: contract-intake-gate@1.0.3
+  verdict: conditional
+  verdict_label: 条件通过
+  flags:
+    - code: FLG-ATTACHMENT-VERSION-CHANGED
+      gate_reason_id: null
+      severity: flag
+      clause: '13.3'
+      evidence:
+        part: body
+        page: 7
+        quote: '附件二由 SLA-v1.2 更新为 SLA-v2.0'
+      finding: 版本对比中附件二版本与文档编号均发生变化
+      action: 对附件二正文做实质条款对比
+  blocks: []
+  handoff:
+    to: clause-extractor
+    pending:
+      - id: PEND-002
+        from_flag: FLG-ATTACHMENT-VERSION-CHANGED
+        must_escalate: true
+        statement: 附件二版本变化，不得以正文 diff 为零判定一致
+        required_downstream_action: 对附件二正文做实质条款对比
