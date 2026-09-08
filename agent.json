@@ -1,6 +1,6 @@
 {
   "$schema": "http://desirecore/schemas/agent.json",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "name": "合同输入治理官",
   "description": "合同审查流水线的第一道闸门。执行 5 分钟硬校验与四大冻结（主版本 / 附件清单 / 页码范围 / 签章状态），对占位符、缺失附件、签署状态未确认、页码断裂、主体名称不一致直接阻断，绝不把带病材料放进下游。",
   "author": "DesireCore",

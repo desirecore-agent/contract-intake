@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.2
+version: 1.0.3
 type: procedural
 risk_level: low
 status: enabled
@@ -30,8 +30,8 @@ requires:
     - GenerateUUID
 metadata:
   author: DesireCore
-  version: 1.0.2
-  updated_at: '2026-09-07'
+  version: 1.0.3
+  updated_at: '2026-09-08'
 ---
 
 # 合同输入治理闸门
@@ -92,6 +92,7 @@ metadata:
 | `version-mismatch` | 是 | `BLK-ATTACHMENT-VERSION-CONFLICT` / `BLK-ATTACHMENT-NAME-CONFLICT` |
 | `party-name-inconsistency` | 是 | `BLK-PARTY-INCONSISTENT` / `BLK-PARTY-ROLE-CONFLICT` |
 | `amount-in-words-mismatch` | **否** | `FLG-AMOUNT-IN-WORDS-MISMATCH` |
+| `attachment-manifest-incomplete` | **否** | `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` |
 
 表外的内部编码（`BLK-OBJECT-UNIDENTIFIED`、`BLK-JURISDICTION-PACK-MISMATCH` 等）照常影响门禁结论，
 输出时 `gate_reason_id` 写 `null` 并在 `finding` 里说清楚。
@@ -137,6 +138,7 @@ Exhibit / Schedule”章节和附件编号，这些材料只是正文引用的�
 | 提交为空 / 全部文件不可读 | `BLK-NO-MATERIAL` |
 | 声称版本对比但只提交了一个版本 | `BLK-COMPARISON-INCOMPLETE` |
 | 附件清单声明的附件正文未随材料送达 | `SCOPE-ATTACHMENT-BODY-ABSENT`（**范围事实，不是缺陷**） |
+| 正文明确把另附、未送达的文件指定为**权威附件清单**，以致本次无法取得完整 `declared` 集合 | 见 S4 R9；不得仅因某一已声明附件正文未送达而命中 |
 
 > ⚠️ 最容易误报的地方：**附件正文没随材料来 ≠ 缺失附件**。冻结的对象是**附件清单**，不是附件文件。
 > 只有"正文引用了、清单里没有"才是缺失（见 S4）。
@@ -285,6 +287,7 @@ blocks:
 | R6 | `declared` 条目**缺 `version`** | `SCOPE-ATTACHMENT-VERSION-UNCOVERED`（**不是缺陷，不影响门禁结论**） |
 | R7 | `declared` 条目**未随材料送达正文** | `SCOPE-ATTACHMENT-BODY-ABSENT`（**不是缺陷，不影响门禁结论**） |
 | R8 | 版本对比模式下，两版 `declared` 的同编号条目 `version` 或 `doc_no` 不同 | `FLG-ATTACHMENT-VERSION-CHANGED` + `must_escalate: true` |
+| R9 | 正文明确指向独立的**权威附件清单**（如“完整附件清单见另附《合同附件目录》”），但该清单未随材料送达，因而无法确定完整 `declared` 集合 | `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` + `PEND-001.must_escalate: true` |
 
 > ⚠️ **R5/R6 的分界必须守住。**"附件一《岗位职责说明书》""Exhibit A — Statement of Work Template"
 > 没有版本号，是常见且合法的写法。**只记 `SCOPE-`，既不阻断也不把门禁结论降为 `conditional`。**
@@ -293,6 +296,11 @@ blocks:
 > ⚠️ **R7 同理。**附件正文没随材料来 ≠ 附件缺失。冻结的对象是清单条目的身份，
 > 不是附件文件本身。只在 `scope` 里如实登记 `delivered: false`，并让下游把相关检查项留白为
 > `not_covered`。
+
+> ⚠️ **R9 的范围必须收窄。**它只适用于本次材料明确承认存在、却未取得的**权威附件清单本身**；
+> 这使 `declared` 集合无法被冻结，不能按“已知附件正文未送达”处理。不得把 R7、没有版本号的
+> R6、或 R8 的版本变化改写为 R9。正文引用某附件而正式清单没有该条目仍是 R1 的 `blocked`，
+> 绝不能降级为 `conditional`。
 
 > ⚠️ **程序性组成材料也适用 R7。**“组成合同的文件”条款本身不是附件清单；没有附件编号的
 > 采购文件/响应文件/补充协议只形成范围事实，不影响门禁结论。不要把 `SCOPE-*` 升格为 `BLK-*`。
@@ -306,6 +314,21 @@ blocks:
 > - `consistency_conclusion_allowed` 置 `false`
 > - 在交接块的 `pending` 中写死"附件 `<编号>` 由 `<旧版本>` 替换为 `<新版本>`，风险变化方向未定，下游必须实质对比"
 > - 标记 `must_escalate: true`，注明"下游不得自行消化本标记"
+
+**R9 的跨字段回执契约（不可用泛化规则替代）**
+
+R9 命中且不存在任一 `BLK-*` 时，必须同时满足以下条件：
+
+1. `verdict: conditional` 且 `verdict_label: 条件通过`，并在 `flags` 写入结论四元组 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE`，
+   `gate_reason_id: attachment-manifest-incomplete`，证据必须定位到“另附/完整清单”这一权威来源。
+2. `handoff.to` 保持正常下游目标；`conditional` 不是暂停或拒绝。
+3. `handoff.pending` 必须有且仅有本次 R9 对应的 `PEND-001`，其
+   `from_flag: FLG-ATTACHMENT-MANIFEST-INCOMPLETE` 和 `must_escalate: true`。待办必须要求人工补齐
+   权威附件清单并禁止下游把未知附件内容当作已覆盖。
+
+`must_escalate` **不**是全部 `FLG-*` 或全部未送达附件的通用推导。R8 继续按既有版本变化语义
+单独升级；R7 的 `SCOPE-ATTACHMENT-BODY-ABSENT` 仍可在无 `BLK-*` / `FLG-*` 时得到 `passed`，
+且不得生成 `PEND-001`。
 
 **失败后输出什么**
 
@@ -659,14 +682,23 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 无 BLK-*，无 FLG-*，四大冻结全部 frozen      → passed       通过
 ```
 
-`verdict` 字段写机器值（`passed` / `conditional` / `blocked`），面向人的文案写中文标签。
+`verdict` 字段写机器值（`passed` / `conditional` / `blocked`），`verdict_label` 必须分别写
+`通过` / `条件通过` / `拒绝`，不得让两个字段表达不同结论。
 
 **`SCOPE-*` 不参与判定。**只有 `SCOPE-*` 记录、没有 `BLK-*` / `FLG-*` 时，结论是 `passed`，
 **不是** `conditional`。这是本技能最容易出的门禁错判：
 把"附件没写版本号""附件正文没随材料来"这类客观范围事实当成缺陷，会让一大批正常合同被降级。
 
-四大冻结任一 `frozen: false` 但又没有对应的 `BLK-*` 时，说明检查逻辑有漏洞——
-此时按 `conditional` 处理并补记 `FLG-FREEZE-INCOMPLETE`，**不得**按 `passed` 处理。
+四大冻结任一 `frozen: false` 但又没有对应的 `BLK-*`，也没有**明确解释该冻结缺口的
+`FLG-*`** 时，说明检查逻辑有漏洞——此时按 `conditional` 处理并补记
+`FLG-FREEZE-INCOMPLETE`，**不得**按 `passed` 处理。R9 已由
+`FLG-ATTACHMENT-MANIFEST-INCOMPLETE` 明确解释附件清单冻结缺口；不得再附加
+`FLG-FREEZE-INCOMPLETE` 或为它生成第二条 pending。
+
+**跨字段一致性检查（出具前必须执行）**：`verdict: passed` 时不得留下任何 `FLG-*`；
+`verdict: conditional` 时每条影响结论的 `FLG-*` 都必须有匹配的 `handoff.pending`；
+其中 R9 必须严格使用 `PEND-001` 和 `must_escalate: true`。`verdict: blocked` 时
+`handoff.to` 必须为 `null`，即使同时存在 `FLG-*` 也不得交接。
 
 ### 三态各自的下游语义（不可混淆）
 
@@ -714,8 +746,9 @@ contract_intake_receipt:
   intake_id: INTAKE-20260331-7f3a2c9b
   intake_at: 2026-03-31T09:12:04+08:00
   executed_by: contract-intake          # 执行 Agent
-  skill: contract-intake-gate@1.0.0
+  skill: contract-intake-gate@1.0.3
   verdict: blocked                      # passed | conditional | blocked
+  verdict_label: 拒绝                   # 通过 | 条件通过 | 拒绝；必须与 verdict 对应
   verdict_basis: "命中 5 类阻断：placeholder-unfilled(×9) / page-discontinuity / attachment-missing / version-mismatch / party-name-inconsistency"
 
   object:                               # 交接对象编号
@@ -810,14 +843,14 @@ handoff:
     - 法域线索：准据法为中国法（16.1，第 6 页），规则包 cn-v3 匹配
 
   pending:                              # 待确认项（下游不得自行消化）
-    - id: PEND-01
+    - id: PEND-002
       from_flag: FLG-ATTACHMENT-VERSION-CHANGED
       must_escalate: true
       statement: 附件二由 SLA-v1.2 替换为 SLA-v2.0（文档编号 YCIT-DOC-SLA-v1.2 → YCIT-DOC-SLA-v2.0）；
         正文逐字相同（body_diff_count=0），**不得据此判定两版一致**
       required_downstream_action: 对附件二正文做实质条款对比，并给出风险变化方向（上升 / 下调 / 持平）
       evidence: {part: body, page: 7, quote: "附件二 | 服务水平协议 | SLA-v2.0 | YCIT-DOC-SLA-v2.0"}
-    - id: PEND-02
+    - id: PEND-003
       from_flag: SCOPE-ATTACHMENT-BODY-ABSENT
       must_escalate: false
       statement: 附件一、附件三的正文未随本次材料送达，身份已冻结但内容未覆盖
@@ -868,6 +901,8 @@ handoff:
 - [ ] 只有 `SCOPE-*` 时 `verdict` 是 `passed`，没有被误降为 `conditional`
 - [ ] 附件清单条目缺版本号只记 `SCOPE-`，既没有阻断也没有降级门禁结论
 - [ ] 附件正文未随材料送达只记 `SCOPE-`，没有报成 `attachment-missing`
+- [ ] 仅在未取得权威附件清单、无法确定完整 `declared` 集合时才报 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE`；
+      普通附件正文未送达、R6 与 R8 不得误用该标记或生成 `PEND-001`
 - [ ] 身份证 / 手机号 / 邮箱的星号掩码没有被判成占位符
 - [ ] 首部定义过的简称没有被误报为主体不一致
 - [ ] 英文合同没有因为"没有公章字样"被判缺签章
@@ -881,6 +916,8 @@ handoff:
 
 - [ ] `conditional` 时正常交接、下游范围未缩减，只是带上了 `pending`
 - [ ] `amount-in-words-mismatch` 被当作非阻断项处理，没有中断流水线
+- [ ] R9 命中时 `verdict: conditional`、`handoff.to` 正常，且 `PEND-001` 的
+      `from_flag` 和 `must_escalate: true` 与该标记匹配
 
 **版本陷阱**
 

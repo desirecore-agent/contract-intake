@@ -1,0 +1,15 @@
+contract_intake_receipt:
+  intake_id: INTAKE-UNDELIVERED-BODY
+  skill: contract-intake-gate@1.0.3
+  verdict: passed
+  verdict_label: 通过
+  scope:
+    attachment_body_absent:
+      - no: 附件一
+        code: SCOPE-ATTACHMENT-BODY-ABSENT
+        delivered: false
+  flags: []
+  blocks: []
+  handoff:
+    to: clause-extractor
+    pending: []

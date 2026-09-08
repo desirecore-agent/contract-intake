@@ -1,0 +1,28 @@
+contract_intake_receipt:
+  intake_id: INTAKE-UNDECLARED-REFERENCE
+  skill: contract-intake-gate@1.0.3
+  verdict: blocked
+  verdict_label: 拒绝
+  freeze:
+    attachment_manifest:
+      frozen: false
+      declared:
+        - no: 附件一
+          name: 服务说明
+          version: V1.0
+          doc_no: DEMO-SOW-1
+  flags: []
+  blocks:
+    - code: BLK-ATTACHMENT-MISSING
+      gate_reason_id: attachment-missing
+      severity: block
+      clause: '8.2'
+      evidence:
+        part: body
+        page: 5
+        quote: '验收以附件二《验收标准》为准'
+      finding: 正文引用附件二，但正式附件清单中没有该条目
+      action: 将附件二登记到正式附件清单后重新提交
+  handoff:
+    to: null
+    pending: []
