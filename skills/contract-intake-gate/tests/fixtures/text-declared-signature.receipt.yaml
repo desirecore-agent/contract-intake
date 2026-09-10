@@ -1,0 +1,35 @@
+contract_intake_receipt:
+  intake_id: INTAKE-TEXT-DECLARED-SIGNATURE
+  skill: contract-intake-gate@1.0.4
+  verdict: passed
+  verdict_label: 通过
+  freeze:
+    execution_status:
+      frozen: true
+      verification_status: not_performed
+      parties:
+        - party: 买方
+          name: 示例采购人
+          seal: present
+          signatory: 李四
+          title: 法定代表人或委托代理人
+          date: '2026-08-18'
+          complete: true
+          evidence_level: declared_in_text
+          evidence:
+            part: body
+            page: 3
+            quote: '（已加盖单位公章） 法定代表人或委托代理人：李四 2026-08-18'
+          verification_status: not_performed
+          verification_note: 仅核对文本声明；未做图像或电子签真实性验证
+  checks:
+    - id: S5
+      name: 签章状态
+      status: pass
+      finding: 文本声明的签章字段齐备；证据等级 declared_in_text，未做图像或电子签真实性验证
+  blocks: []
+  flags: []
+  handoff:
+    to: clause-extractor
+    confirmed:
+      - 签章字段已冻结：文本声明的公章、签署人、职务与日期齐备（declared_in_text；未做图像或电子签真实性验证）

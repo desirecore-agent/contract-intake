@@ -80,3 +80,24 @@ test('referenced attachment omitted from formal manifest remains blocked', async
   assert.ok(receipt.blocks.some(({ code, gate_reason_id }) =>
     code === 'BLK-ATTACHMENT-MISSING' && gate_reason_id === 'attachment-missing'))
 })
+
+test('text-declared signature fields can pass S5 without claiming authenticity verification', async () => {
+  const receipt = await fixture('text-declared-signature.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+  const execution = receipt.freeze.execution_status
+  const party = execution.parties[0]
+  const s5 = receipt.checks.find(({ id }) => id === 'S5')
+  const confirmed = receipt.handoff.confirmed.join('\n')
+
+  assert.equal(receipt.verdict, 'passed')
+  assert.equal(execution.frozen, true)
+  assert.equal(execution.verification_status, 'not_performed')
+  assert.equal(party.complete, true)
+  assert.equal(party.evidence_level, 'declared_in_text')
+  assert.equal(party.verification_status, 'not_performed')
+  assert.equal(s5?.status, 'pass')
+  assert.match(s5?.finding ?? '', /declared_in_text/)
+  assert.match(s5?.finding ?? '', /未做图像或电子签真实性验证/)
+  assert.match(confirmed, /declared_in_text/)
+  assert.match(confirmed, /未做图像或电子签真实性验证/)
+  assert.doesNotMatch(`${s5?.finding}\n${confirmed}`, /真实性已验证|授权已验证|签章真实|实际签署已验证/)
+})
