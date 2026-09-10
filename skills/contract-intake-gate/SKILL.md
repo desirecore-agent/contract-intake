@@ -428,7 +428,6 @@ freeze:
     parties:
       - party: 甲方
         name: Northwind Analytics Holdings Ltd.
-        seal: n/a           # 英文合同不适用
         seal_field: not_covered
         seal_evidence:
           input_path: /workdir/contracts/example-signature-page.md

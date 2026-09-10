@@ -152,6 +152,21 @@ test('visual signature observation can pass S5 without becoming authenticity ver
   assert.doesNotMatch(confirmed, /真实性已验证|授权已验证|签章真实|实际签署已验证/)
 })
 
+test('incomplete S5 fixture remains source-anchored without an ungrounded seal field', async () => {
+  const receipt = await fixture('incomplete-signature.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+  const execution = receipt.freeze.execution_status
+  const party = execution.parties[0]
+
+  assertSignatureEvidenceContract(receipt)
+  assert.equal(receipt.verdict, 'blocked')
+  assert.equal(execution.frozen, false)
+  assert.equal(party.evidence_level, 'not_covered')
+  assert.equal(party.seal_field, 'not_covered')
+  assert.equal(party.seal, undefined)
+  assert.equal(party.complete, false)
+  assert.ok(receipt.blocks.some(({ code }) => code === 'BLK-SIGNATURE-INCOMPLETE'))
+})
+
 test('S5 contract rejects a text claim of a present seal or unsupported authenticity verification', async () => {
   const receipt = await fixture('text-declared-signature.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
   const conflict = structuredClone(receipt)

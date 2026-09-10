@@ -1,0 +1,37 @@
+contract_intake_receipt:
+  intake_id: INTAKE-INCOMPLETE-SIGNATURE
+  skill: contract-intake-gate@1.0.4
+  verdict: blocked
+  verdict_label: 拒绝
+  freeze:
+    execution_status:
+      frozen: false
+      verification_status: not_performed
+      parties:
+        - party: 甲方
+          name: Northwind Analytics Holdings Ltd.
+          seal_field: not_covered
+          seal_evidence:
+            input_path: /workdir/contracts/example-signature-page.md
+            page: 4
+            locator: 落款区
+            quote: 'Signature: ______________________________ / Name: / Title: / Date:'
+          signatory: null
+          title: null
+          date: null
+          complete: false
+          evidence_level: not_covered
+          verification_status: not_performed
+  checks:
+    - id: S5
+      name: 签章状态
+      status: fail
+      finding: 签名区留空，缺签署人姓名、职务与签署日期，签署状态无法冻结
+  blocks:
+    - code: BLK-SIGNATURE-INCOMPLETE
+      gate_reason_id: signature-status-unconfirmed
+      severity: block
+  flags: []
+  handoff:
+    to: null
+    confirmed: []
