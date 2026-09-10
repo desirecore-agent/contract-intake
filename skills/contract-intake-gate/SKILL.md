@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.3
+version: 1.0.4
 type: procedural
 risk_level: low
 status: enabled
@@ -28,10 +28,11 @@ requires:
     - Write
     - MathCalc
     - GenerateUUID
+    - UnderstandImage
 metadata:
   author: DesireCore
-  version: 1.0.3
-  updated_at: '2026-09-08'
+  version: 1.0.4
+  updated_at: '2026-09-10'
 ---
 
 # 合同输入治理闸门
@@ -393,6 +394,18 @@ blocks:
    `Signature` 有实际签署痕迹（手写名、`/s/ Name` 电子签形式）为准。
 3. 首部声明的 `execution_date_declared` 与落款 `Date` 不一致时，以**两者都必须有值且相等**为通过条件。
 
+### 签章证据级别（只描述已见证据）
+
+S5 的 `frozen: true` 只表示签章**字段完整性**已按下列证据冻结，不表示签章真实性、授权、合同效力或实际签署已经验证。对每一方在 `freeze.execution_status.parties[]` **必须**写 `evidence_level`、`seal_evidence` 与 `verification_status`，并在交接的已确认事项中带同样的限定；缺任一结构化证据字段，该方 S5 不得记 `pass`。
+
+| `evidence_level` | 可据此陈述 | 不得据此陈述 |
+|---|---|---|
+| `declared_in_text` | 原文文本声明有公章/签名/职务/日期，且字段完整；印章字段须写 `seal_field: declared_in_text`，`seal_evidence` 必须含实际 `input_path`（绝对路径）、`page`、`locator` 与原文 `quote` | `seal: present`；印章、签名、授权或实际签署真实有效；已做图像或电子签验证 |
+| `visual_mark_detected` | 已用本次实际 `UnderstandImage` 观察到印章或签名标记；`seal_evidence` 必须含实际 `input_path`（绝对路径）、`page` 或 `image_index`、`locator`、`visual_description` 和该次 `tool_observation`（`tool: UnderstandImage` + `summary`） | 标记真实、来源可信、授权有效，或已完成电子签验真 |
+| `not_covered` | S5 字段缺失或无法观察；仍须用 `seal_field: not_covered` 和含实际 `input_path`、`page`、`locator`、`quote` 的 `seal_evidence` 说明缺口 | 任何正向签章状态或验真结论 |
+
+纯 Markdown / OCR 文本中“已加盖单位公章”、姓名、职务和日期齐备时，使用 `declared_in_text`，`seal_field: declared_in_text`、完整 `seal_evidence` 和 `verification_status: not_performed`，并写明“未做图像或电子签真实性验证”。它仍可通过**字段完整**门禁；不要因缺少图像而误报 `BLK-SIGNATURE-INCOMPLETE`。只有对本次输入实际调用 `UnderstandImage` 并取得可审计观察摘要时，才可使用 `visual_mark_detected`，且 `verification_status` 仍为 `not_performed`；不得编造工具调用、观察摘要或引用。本技能没有验签工具或可信验真结果结构：禁止输出 `authenticity_verified`；外部证明材料最多引用其来源声明，也不得把图像可见升级为验真。
+
 **命中什么算失败**
 
 | 情形 | 判定 |
@@ -411,14 +424,22 @@ blocks:
 freeze:
   execution_status:
     frozen: false
+    verification_status: not_performed
     parties:
       - party: 甲方
         name: Northwind Analytics Holdings Ltd.
-        seal: n/a           # 英文合同不适用
+        seal_field: not_covered
+        seal_evidence:
+          input_path: /workdir/contracts/example-signature-page.md
+          page: 4
+          locator: 落款区
+          quote: 'Signature: ______________________________ / Name: / Title: / Date:'
         signatory: null     # 缺失
         title: null         # 缺失
         date: null          # 缺失
         complete: false
+        evidence_level: not_covered
+        verification_status: not_performed
 blocks:
   - code: BLK-SIGNATURE-INCOMPLETE
     gate_reason_id: signature-status-unconfirmed
@@ -430,6 +451,64 @@ blocks:
       quote: "Signature: ______________________________ / Name: / Title: / Date:"
     finding: 双方签名区留空，缺签署人姓名、职务与签署日期，签署状态无法冻结
     action: 取得双方授权代表签署（姓名、职务、日期齐全）后重新提交受理
+```
+
+**纯文本字段完整的通过样例**（不新增平台强制字段；`evidence_level` / `verification_status` 是本技能的回执约定）：
+
+```yaml
+freeze:
+  execution_status:
+    frozen: true
+    verification_status: not_performed
+    parties:
+      - party: 甲方
+        name: 示例采购人
+        seal_field: declared_in_text
+        seal_evidence:
+          input_path: /workdir/contracts/example-procurement-contract.md
+          page: 3
+          locator: 落款区，买方名称下方
+          quote: '（已加盖单位公章）'
+        signatory: 李四
+        title: 法定代表人或委托代理人
+        date: '2026-08-18'
+        complete: true
+        evidence_level: declared_in_text
+        verification_status: not_performed
+        verification_note: 仅核对 Markdown 文本声明；未做图像或电子签真实性验证
+checks:
+  - id: S5
+    name: 签章状态
+    status: pass
+    finding: 文本声明的公章、签署人、职务与日期字段齐备；证据等级 declared_in_text，未做图像或电子签真实性验证
+```
+
+**图像可见标记的通过样例**（仅在下列 `tool_observation` 逐字来自本次实际 `UnderstandImage` 返回时使用；示例中的路径和摘要是结构形态，不是可复制的工具引用）：
+
+```yaml
+freeze:
+  execution_status:
+    frozen: true
+    verification_status: not_performed
+    parties:
+      - party: 乙方
+        name: 示例供应商
+        seal_field: visual_mark_detected
+        seal_evidence:
+          input_path: /workdir/contracts/example-procurement-contract.pdf
+          page: 3
+          locator: 第 3 页右下角落款区
+          visual_description: 可见圆形红色印章标记与手写签名形状
+          tool_observation:
+            tool: UnderstandImage
+            summary: 本次工具观察到第 3 页右下角有圆形红色印章标记和手写签名形状
+        signatory: 李四
+        title: 法定代表人或委托代理人
+        date: '2026-08-18'
+        complete: true
+        evidence_level: visual_mark_detected
+        verification_status: not_performed
+        verification_note: 仅记录本次图像观察；未做图像或电子签真实性验证
 ```
 
 ---
@@ -746,7 +825,7 @@ contract_intake_receipt:
   intake_id: INTAKE-20260331-7f3a2c9b
   intake_at: 2026-03-31T09:12:04+08:00
   executed_by: contract-intake          # 执行 Agent
-  skill: contract-intake-gate@1.0.3
+  skill: contract-intake-gate@1.0.4
   verdict: blocked                      # passed | conditional | blocked
   verdict_label: 拒绝                   # 通过 | 条件通过 | 拒绝；必须与 verdict 对应
   verdict_basis: "命中 5 类阻断：placeholder-unfilled(×9) / page-discontinuity / attachment-missing / version-mismatch / party-name-inconsistency"
@@ -761,7 +840,10 @@ contract_intake_receipt:
     master_version: {...}               # S2
     page_range: {...}                   # S3
     attachment_manifest: {...}          # S4
-    execution_status: {...}             # S5
+    execution_status:                   # S5；冻结字段完整性，不等同真实性验证
+      frozen: false
+      verification_status: not_performed # 两种允许的证据级别都必须明确未验真
+      parties: [...]
   all_frozen: false
   consistency_conclusion_allowed: false
 
@@ -837,7 +919,7 @@ handoff:
   confirmed:                            # 已确认事项（下游可直接当作事实使用）
     - 主版本已冻结：合同编号 YCIT-SAAS-2025-0206，正文共 7 页，页码 1–7 连续
     - 附件清单已冻结：附件一 V1.0、附件二 SLA-v1.2、附件三 V1.0，编号与名称在正文引用中一致
-    - 签章状态已冻结：双方公章 + 授权代表签字 + 职务 + 签署日期 2025-11-03 齐备
+    - 签章字段已冻结：双方文本声明的公章 + 授权代表签字 + 职务 + 签署日期 2025-11-03 齐备（declared_in_text；未做图像或电子签真实性验证）
     - 无占位符、无空字段
     - 主体名称全文一致，无角色冲突
     - 法域线索：准据法为中国法（16.1，第 6 页），规则包 cn-v3 匹配
@@ -867,7 +949,7 @@ handoff:
       master_version: YCIT-SAAS-2025-0206
       attachment_manifest_digest: <四字段对账表的摘要>
       page_range: {body: "1-7", "attachment:附件二": "1-2"}
-      execution_status: executed@2025-11-03
+      execution_status: declared_in_text@2025-11-03
     consistency_conclusion_allowed: false
 
   do_not_pass:
@@ -911,6 +993,9 @@ handoff:
 
 - [ ] 落款区的空白既报了 `placeholder-unfilled`，也报了 `signature-status-unconfirmed`
 - [ ] 主体名称一致性是全文逐处扫描得出的，不是只比对了首部与落款
+- [ ] S5 每一方都记录了 `evidence_level`、完整 `seal_evidence` 与 `verification_status`；纯文本声明写 `declared_in_text` + `not_performed`，其证据含实际绝对路径、页码、定位说明和引文，且交接没有声称已验真
+- [ ] `visual_mark_detected` 的 `seal_evidence` 含实际绝对路径、页码或图像序号、定位描述，以及本次 `UnderstandImage` 的真实观察摘要；没有工具观察时没有写该级别
+- [ ] 可见印章/签名图像最多写 `visual_mark_detected`；没有写 `seal: present`、`authenticity_verified`、签章真实、授权已验证或实际签署已验证
 
 **不误停（`conditional` 必须继续）**
 
