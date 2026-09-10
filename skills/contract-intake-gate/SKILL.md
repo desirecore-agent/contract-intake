@@ -28,6 +28,7 @@ requires:
     - Write
     - MathCalc
     - GenerateUUID
+    - UnderstandImage
 metadata:
   author: DesireCore
   version: 1.0.4
@@ -395,14 +396,15 @@ blocks:
 
 ### 签章证据级别（只描述已见证据）
 
-S5 的 `frozen: true` 只表示签章**字段完整性**已按下列证据冻结，不表示签章真实性、授权、合同效力或实际签署已经验证。对每一方在 `freeze.execution_status.parties[]` 写可选但必须自描述的 `evidence_level` 与 `verification_status`，并在交接的已确认事项中带同样的限定：
+S5 的 `frozen: true` 只表示签章**字段完整性**已按下列证据冻结，不表示签章真实性、授权、合同效力或实际签署已经验证。对每一方在 `freeze.execution_status.parties[]` **必须**写 `evidence_level`、`seal_evidence` 与 `verification_status`，并在交接的已确认事项中带同样的限定；缺任一结构化证据字段，该方 S5 不得记 `pass`。
 
 | `evidence_level` | 可据此陈述 | 不得据此陈述 |
 |---|---|---|
-| `declared_in_text` | 原文文本声明有公章/签名/职务/日期，且字段完整；印章字段须写 `seal_field: declared_in_text` 并给出 `seal_evidence` | `seal: present`；印章、签名、授权或实际签署真实有效；已做图像或电子签验证 |
-| `visual_mark_detected` | 已用图像查看实际看见印章或签名标记 | 标记真实、来源可信、授权有效，或已完成电子签验真 |
+| `declared_in_text` | 原文文本声明有公章/签名/职务/日期，且字段完整；印章字段须写 `seal_field: declared_in_text`，`seal_evidence` 必须含实际 `input_path`（绝对路径）、`page`、`locator` 与原文 `quote` | `seal: present`；印章、签名、授权或实际签署真实有效；已做图像或电子签验证 |
+| `visual_mark_detected` | 已用本次实际 `UnderstandImage` 观察到印章或签名标记；`seal_evidence` 必须含实际 `input_path`（绝对路径）、`page` 或 `image_index`、`locator`、`visual_description` 和该次 `tool_observation`（`tool: UnderstandImage` + `summary`） | 标记真实、来源可信、授权有效，或已完成电子签验真 |
+| `not_covered` | S5 字段缺失或无法观察；仍须用 `seal_field: not_covered` 和含实际 `input_path`、`page`、`locator`、`quote` 的 `seal_evidence` 说明缺口 | 任何正向签章状态或验真结论 |
 
-纯 Markdown / OCR 文本中“已加盖单位公章”、姓名、职务和日期齐备时，使用 `declared_in_text`，`seal_field: declared_in_text`、`seal_evidence` 和 `verification_status: not_performed`，并写明“未做图像或电子签真实性验证”。它仍可通过**字段完整**门禁；不要因缺少图像而误报 `BLK-SIGNATURE-INCOMPLETE`。如果用 `UnderstandImage` 看见标记，才可使用 `visual_mark_detected`，且 `verification_status` 仍为 `not_performed`。本技能没有验签工具或可信验真结果结构：禁止输出 `authenticity_verified`；外部证明材料最多引用其来源声明，也不得把图像可见升级为验真。
+纯 Markdown / OCR 文本中“已加盖单位公章”、姓名、职务和日期齐备时，使用 `declared_in_text`，`seal_field: declared_in_text`、完整 `seal_evidence` 和 `verification_status: not_performed`，并写明“未做图像或电子签真实性验证”。它仍可通过**字段完整**门禁；不要因缺少图像而误报 `BLK-SIGNATURE-INCOMPLETE`。只有对本次输入实际调用 `UnderstandImage` 并取得可审计观察摘要时，才可使用 `visual_mark_detected`，且 `verification_status` 仍为 `not_performed`；不得编造工具调用、观察摘要或引用。本技能没有验签工具或可信验真结果结构：禁止输出 `authenticity_verified`；外部证明材料最多引用其来源声明，也不得把图像可见升级为验真。
 
 **命中什么算失败**
 
@@ -427,10 +429,18 @@ freeze:
       - party: 甲方
         name: Northwind Analytics Holdings Ltd.
         seal: n/a           # 英文合同不适用
+        seal_field: not_covered
+        seal_evidence:
+          input_path: /workdir/contracts/example-signature-page.md
+          page: 4
+          locator: 落款区
+          quote: 'Signature: ______________________________ / Name: / Title: / Date:'
         signatory: null     # 缺失
         title: null         # 缺失
         date: null          # 缺失
         complete: false
+        evidence_level: not_covered
+        verification_status: not_performed
 blocks:
   - code: BLK-SIGNATURE-INCOMPLETE
     gate_reason_id: signature-status-unconfirmed
@@ -455,13 +465,16 @@ freeze:
       - party: 甲方
         name: 示例采购人
         seal_field: declared_in_text
-        seal_evidence: {part: body, page: 3, quote: '（已加盖单位公章）'}
+        seal_evidence:
+          input_path: /workdir/contracts/example-procurement-contract.md
+          page: 3
+          locator: 落款区，买方名称下方
+          quote: '（已加盖单位公章）'
         signatory: 李四
         title: 法定代表人或委托代理人
         date: '2026-08-18'
         complete: true
         evidence_level: declared_in_text
-        evidence: {part: body, page: 3, quote: '（已加盖单位公章） 法定代表人或委托代理人：李四 2026-08-18'}
         verification_status: not_performed
         verification_note: 仅核对 Markdown 文本声明；未做图像或电子签真实性验证
 checks:
@@ -469,6 +482,34 @@ checks:
     name: 签章状态
     status: pass
     finding: 文本声明的公章、签署人、职务与日期字段齐备；证据等级 declared_in_text，未做图像或电子签真实性验证
+```
+
+**图像可见标记的通过样例**（仅在下列 `tool_observation` 逐字来自本次实际 `UnderstandImage` 返回时使用；示例中的路径和摘要是结构形态，不是可复制的工具引用）：
+
+```yaml
+freeze:
+  execution_status:
+    frozen: true
+    verification_status: not_performed
+    parties:
+      - party: 乙方
+        name: 示例供应商
+        seal_field: visual_mark_detected
+        seal_evidence:
+          input_path: /workdir/contracts/example-procurement-contract.pdf
+          page: 3
+          locator: 第 3 页右下角落款区
+          visual_description: 可见圆形红色印章标记与手写签名形状
+          tool_observation:
+            tool: UnderstandImage
+            summary: 本次工具观察到第 3 页右下角有圆形红色印章标记和手写签名形状
+        signatory: 李四
+        title: 法定代表人或委托代理人
+        date: '2026-08-18'
+        complete: true
+        evidence_level: visual_mark_detected
+        verification_status: not_performed
+        verification_note: 仅记录本次图像观察；未做图像或电子签真实性验证
 ```
 
 ---
@@ -953,7 +994,8 @@ handoff:
 
 - [ ] 落款区的空白既报了 `placeholder-unfilled`，也报了 `signature-status-unconfirmed`
 - [ ] 主体名称一致性是全文逐处扫描得出的，不是只比对了首部与落款
-- [ ] S5 每一方都记录了 `evidence_level` 与 `verification_status`；纯文本声明写 `declared_in_text` + `not_performed`，且交接没有声称已验真
+- [ ] S5 每一方都记录了 `evidence_level`、完整 `seal_evidence` 与 `verification_status`；纯文本声明写 `declared_in_text` + `not_performed`，其证据含实际绝对路径、页码、定位说明和引文，且交接没有声称已验真
+- [ ] `visual_mark_detected` 的 `seal_evidence` 含实际绝对路径、页码或图像序号、定位描述，以及本次 `UnderstandImage` 的真实观察摘要；没有工具观察时没有写该级别
 - [ ] 可见印章/签名图像最多写 `visual_mark_detected`；没有写 `seal: present`、`authenticity_verified`、签章真实、授权已验证或实际签署已验证
 
 **不误停（`conditional` 必须继续）**

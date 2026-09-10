@@ -12,18 +12,15 @@ contract_intake_receipt:
           name: 示例采购人
           seal_field: declared_in_text
           seal_evidence:
-            part: body
+            input_path: /workdir/contracts/example-procurement-contract.md
             page: 3
+            locator: 落款区，买方名称下方
             quote: '（已加盖单位公章）'
           signatory: 李四
           title: 法定代表人或委托代理人
           date: '2026-08-18'
           complete: true
           evidence_level: declared_in_text
-          evidence:
-            part: body
-            page: 3
-            quote: '（已加盖单位公章） 法定代表人或委托代理人：李四 2026-08-18'
           verification_status: not_performed
           verification_note: 仅核对文本声明；未做图像或电子签真实性验证
   checks:

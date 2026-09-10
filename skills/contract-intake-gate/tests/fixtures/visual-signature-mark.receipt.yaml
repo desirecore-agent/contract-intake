@@ -1,0 +1,39 @@
+contract_intake_receipt:
+  intake_id: INTAKE-VISUAL-SIGNATURE-MARK
+  skill: contract-intake-gate@1.0.4
+  verdict: passed
+  verdict_label: 通过
+  freeze:
+    execution_status:
+      frozen: true
+      verification_status: not_performed
+      parties:
+        - party: 卖方
+          name: 示例供应商
+          seal_field: visual_mark_detected
+          seal_evidence:
+            input_path: /workdir/contracts/example-procurement-contract.pdf
+            page: 3
+            locator: 第 3 页右下角落款区
+            visual_description: 可见圆形红色印章标记与手写签名形状
+            tool_observation:
+              tool: UnderstandImage
+              summary: 本次工具观察到第 3 页右下角有圆形红色印章标记和手写签名形状
+          signatory: 李四
+          title: 法定代表人或委托代理人
+          date: '2026-08-18'
+          complete: true
+          evidence_level: visual_mark_detected
+          verification_status: not_performed
+          verification_note: 仅记录本次图像观察；未做图像或电子签真实性验证
+  checks:
+    - id: S5
+      name: 签章状态
+      status: pass
+      finding: 图像可见签章标记；证据等级 visual_mark_detected，未做图像或电子签真实性验证
+  blocks: []
+  flags: []
+  handoff:
+    to: clause-extractor
+    confirmed:
+      - 签章字段已冻结：本次图像观察到签章标记（visual_mark_detected；未做图像或电子签真实性验证）

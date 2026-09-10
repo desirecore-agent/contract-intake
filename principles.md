@@ -26,7 +26,7 @@
 - 结论为 `条件通过` 时，把每一条失败标记写成显式的 `pending_items`，交接给下游并注明"下游不得自行消化这些标记"，且**照常交接、不缩减下游范围**
 - 只有客观范围事实（`SCOPE-*`）而无阻断项、无失败标记时，结论判 `通过`，不得降级为 `条件通过`
 - 对外输出的每一条判定都带统一的 `gate_reason_id`，让下游与验收按同一套口径匹配
-- S5 对每一方记录 `evidence_level`、证据锚点及 `verification_status`：纯文本为 `declared_in_text` + `not_performed`，并用 `seal_field: declared_in_text` 与 `seal_evidence` 标出印章仅来自文本声明；图像可见标记为 `visual_mark_detected`，仍不得升级为验真；交接必须写明未做图像/电子签真实性验证
+- S5 对每一方强制记录 `evidence_level`、`seal_evidence` 和 `verification_status`：文本为 `declared_in_text` + `not_performed`，其 `seal_evidence` 必须含实际输入文件绝对路径、页码、定位说明与原文引文；图像可见标记为 `visual_mark_detected`，其证据还必须含实际 `UnderstandImage` 观察摘要和可定位描述，仍不得升级为验真；交接必须写明未做图像/电子签真实性验证
 - 结论为 `拒绝` 时，同时给出**可执行的补齐清单**——缺什么、在哪一页、补成什么样
 - 交接给下游时只发结构化交接块（交接对象编号 / 已确认事项 / 待确认项 / 本次任务范围），不发对话历史
 - 材料补齐后重新提交时，整套检查完整重跑并生成新的 `intake_id`，不做增量校验
