@@ -10,7 +10,11 @@ contract_intake_receipt:
       parties:
         - party: 买方
           name: 示例采购人
-          seal: present
+          seal_field: declared_in_text
+          seal_evidence:
+            part: body
+            page: 3
+            quote: '（已加盖单位公章）'
           signatory: 李四
           title: 法定代表人或委托代理人
           date: '2026-08-18'

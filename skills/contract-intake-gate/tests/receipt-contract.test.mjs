@@ -8,6 +8,22 @@ import { parse } from 'yaml'
 const testsDir = path.dirname(fileURLToPath(import.meta.url))
 const fixture = async (name) => parse(await readFile(path.join(testsDir, 'fixtures', name), 'utf8'))
 
+function assertSignatureEvidenceContract(receipt) {
+  const execution = receipt.freeze.execution_status
+  const allowedEvidenceLevels = new Set(['declared_in_text', 'visual_mark_detected'])
+
+  assert.equal(execution.verification_status, 'not_performed')
+  for (const party of execution.parties) {
+    assert.equal(allowedEvidenceLevels.has(party.evidence_level), true, 'S5 evidence level is unsupported')
+    assert.equal(party.verification_status, 'not_performed')
+    assert.equal(party.seal, undefined, 'a text or image observation must not claim seal: present')
+    if (party.evidence_level === 'declared_in_text') {
+      assert.equal(party.seal_field, 'declared_in_text')
+      assert.ok(party.seal_evidence, 'text-declared seal needs a source anchor')
+    }
+  }
+}
+
 test('R02-like incomplete manifest is conditional, escalated, and handed off', async () => {
   const receipt = await fixture('r02-manifest-incomplete.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
   const { handoff } = receipt
@@ -88,16 +104,30 @@ test('text-declared signature fields can pass S5 without claiming authenticity v
   const s5 = receipt.checks.find(({ id }) => id === 'S5')
   const confirmed = receipt.handoff.confirmed.join('\n')
 
+  assertSignatureEvidenceContract(receipt)
   assert.equal(receipt.verdict, 'passed')
   assert.equal(execution.frozen, true)
   assert.equal(execution.verification_status, 'not_performed')
   assert.equal(party.complete, true)
   assert.equal(party.evidence_level, 'declared_in_text')
-  assert.equal(party.verification_status, 'not_performed')
+  assert.equal(party.seal_field, 'declared_in_text')
+  assert.ok(party.seal_evidence)
   assert.equal(s5?.status, 'pass')
   assert.match(s5?.finding ?? '', /declared_in_text/)
   assert.match(s5?.finding ?? '', /未做图像或电子签真实性验证/)
   assert.match(confirmed, /declared_in_text/)
   assert.match(confirmed, /未做图像或电子签真实性验证/)
   assert.doesNotMatch(`${s5?.finding}\n${confirmed}`, /真实性已验证|授权已验证|签章真实|实际签署已验证/)
+})
+
+test('S5 contract rejects a text claim of a present seal or unsupported authenticity verification', async () => {
+  const receipt = await fixture('text-declared-signature.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+  const conflict = structuredClone(receipt)
+  conflict.freeze.execution_status.parties[0].seal = 'present'
+  assert.throws(() => assertSignatureEvidenceContract(conflict), /seal: present/)
+
+  const unsupported = structuredClone(receipt)
+  unsupported.freeze.execution_status.parties[0].evidence_level = 'authenticity_verified'
+  unsupported.freeze.execution_status.parties[0].verification_status = 'verified'
+  assert.throws(() => assertSignatureEvidenceContract(unsupported), /unsupported/)
 })

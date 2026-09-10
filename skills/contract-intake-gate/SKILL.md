@@ -399,11 +399,10 @@ S5 的 `frozen: true` 只表示签章**字段完整性**已按下列证据冻结
 
 | `evidence_level` | 可据此陈述 | 不得据此陈述 |
 |---|---|---|
-| `declared_in_text` | 原文文本声明有公章/签名/职务/日期，且字段完整 | 印章、签名、授权或实际签署真实有效；已做图像或电子签验证 |
+| `declared_in_text` | 原文文本声明有公章/签名/职务/日期，且字段完整；印章字段须写 `seal_field: declared_in_text` 并给出 `seal_evidence` | `seal: present`；印章、签名、授权或实际签署真实有效；已做图像或电子签验证 |
 | `visual_mark_detected` | 已用图像查看实际看见印章或签名标记 | 标记真实、来源可信、授权有效，或已完成电子签验真 |
-| `authenticity_verified` | 仅在附有独立、可核验的可信验真结果时，按该结果的明确范围陈述 | 超出该结果范围的授权、效力或法律结论 |
 
-纯 Markdown / OCR 文本中“已加盖单位公章”、姓名、职务和日期齐备时，使用 `declared_in_text`，`verification_status: not_performed`，并写明“未做图像或电子签真实性验证”。它仍可通过**字段完整**门禁；不要因缺少图像而误报 `BLK-SIGNATURE-INCOMPLETE`。如果用 `UnderstandImage` 看见标记，才可使用 `visual_mark_detected`，且 `verification_status` 仍为 `not_performed`。本技能没有可信验真服务时，不得自行填写 `authenticity_verified`，也不得把图像可见升级为验真。
+纯 Markdown / OCR 文本中“已加盖单位公章”、姓名、职务和日期齐备时，使用 `declared_in_text`，`seal_field: declared_in_text`、`seal_evidence` 和 `verification_status: not_performed`，并写明“未做图像或电子签真实性验证”。它仍可通过**字段完整**门禁；不要因缺少图像而误报 `BLK-SIGNATURE-INCOMPLETE`。如果用 `UnderstandImage` 看见标记，才可使用 `visual_mark_detected`，且 `verification_status` 仍为 `not_performed`。本技能没有验签工具或可信验真结果结构：禁止输出 `authenticity_verified`；外部证明材料最多引用其来源声明，也不得把图像可见升级为验真。
 
 **命中什么算失败**
 
@@ -455,7 +454,8 @@ freeze:
     parties:
       - party: 甲方
         name: 示例采购人
-        seal: present
+        seal_field: declared_in_text
+        seal_evidence: {part: body, page: 3, quote: '（已加盖单位公章）'}
         signatory: 李四
         title: 法定代表人或委托代理人
         date: '2026-08-18'
@@ -802,7 +802,7 @@ contract_intake_receipt:
     attachment_manifest: {...}          # S4
     execution_status:                   # S5；冻结字段完整性，不等同真实性验证
       frozen: false
-      verification_status: not_performed # declared_in_text / visual_mark_detected 时必须明确未验真
+      verification_status: not_performed # 两种允许的证据级别都必须明确未验真
       parties: [...]
   all_frozen: false
   consistency_conclusion_allowed: false
@@ -954,7 +954,7 @@ handoff:
 - [ ] 落款区的空白既报了 `placeholder-unfilled`，也报了 `signature-status-unconfirmed`
 - [ ] 主体名称一致性是全文逐处扫描得出的，不是只比对了首部与落款
 - [ ] S5 每一方都记录了 `evidence_level` 与 `verification_status`；纯文本声明写 `declared_in_text` + `not_performed`，且交接没有声称已验真
-- [ ] 可见印章/签名图像最多写 `visual_mark_detected`；没有独立可信验真结果时没有写 `authenticity_verified`、签章真实、授权已验证或实际签署已验证
+- [ ] 可见印章/签名图像最多写 `visual_mark_detected`；没有写 `seal: present`、`authenticity_verified`、签章真实、授权已验证或实际签署已验证
 
 **不误停（`conditional` 必须继续）**
 
