@@ -9,6 +9,23 @@ const testsDir = path.dirname(fileURLToPath(import.meta.url))
 const fixture = async (name) => parse(await readFile(path.join(testsDir, 'fixtures', name), 'utf8'))
 const skill = () => readFile(path.join(testsDir, '..', 'SKILL.md'), 'utf8')
 
+test('FileDigest uses literal paths for one file and the explicit JSON batch capability for many', async () => {
+  const text = await skill()
+
+  assert.match(text, /单一文件只传 `paths`，值为该文件的绝对裸字符串/)
+  assert.match(text, /`paths` 中看似 JSON 的字符串仍按字面路径处理/)
+  assert.match(text, /多个文件只有当前工具参数已明示 `paths_json` 兼容入口才可调用它/)
+  assert.match(text, /JSON 字符串数组（1–100 项、UTF-8 不超过 64 KiB）/)
+  assert.match(text, /解码后的路径集合必须逐项等于该集合、不多不少/)
+  assert.match(text, /不得同时传 `paths`、`file_path` 或 `path`/)
+  assert.match(text, /`FileDigest\.paths_json` 是发布此批量规则的最小客户端能力要求/)
+  assert.match(text, /入口未提供时记录能力不可用并停止摘要步骤/)
+  assert.match(text, /保持同一批已列、当前可读且已授权文件不变/)
+  assert.match(text, /仅纠正后重试一次/)
+  assert.match(text, /真实原因并停止摘要步骤/)
+  assert.match(text, /不得用 shell 诊断、重试或替代 `FileDigest`/)
+})
+
 function assertSignatureEvidenceContract(receipt) {
   const execution = receipt.freeze.execution_status
   const allowedEvidenceLevels = new Set(['declared_in_text', 'visual_mark_detected', 'not_covered', 'known_unsigned_draft'])
