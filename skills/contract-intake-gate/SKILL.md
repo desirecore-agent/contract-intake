@@ -24,6 +24,7 @@ requires:
     - Read
     - Ls
     - Glob
+    - FileDigest
     - Grep
     - Write
     - MathCalc
@@ -104,7 +105,7 @@ metadata:
 
 **怎么检**
 
-1. 用 `Ls` / `Glob` 列出本次提交的全部文件，逐一 `Read`。
+1. 用 `Ls` / `Glob` 列出本次提交的全部文件，逐一 `Read`。需要计算本次文件摘要时只能调用 `FileDigest`：参数键为 `paths`，单一文件传该文件的绝对裸字符串，多个文件传工具参数中的原生字符串数组；不得将数组 JSON 序列化为一个字符串，不得再以引号包裹或二次转义反斜杠。若工具返回参数形态错误，保持同一批已列文件不变，按此形态仅纠正后重试一次；仍失败时，明确记录无法核验摘要及工具返回的真实原因，不得编造 SHA-256 或将摘要冻结写为已完成/以此为依据通过。本 Agent 的工具权限不含 `Bash`、`PowerShell` 或 `TerminalControl`，不得用 shell 诊断、重试或替代 `FileDigest`。
 2. 把内容切分为**文档部件（part）**：
    - `body` —— 合同正文
    - `attachment:<编号>` —— 随材料送达的附件正文（如 `attachment:附件二`、`attachment:Exhibit B`）
@@ -123,7 +124,7 @@ metadata:
 3. 识别提交模式：
    - `single` —— 单一版本受理
    - `version_comparison` —— 同一合同的两个及以上版本同时提交（要求做版本对照）
-4. 用 `GenerateUUID` 生成 `intake_id`，格式 `INTAKE-<YYYYMMDD>-<uuid 前 8 位>`。
+4. 用 `GenerateUUID` 生成 `intake_id`，且只能为 ASCII 格式 `INTAKE-YYYYMMDD-8hex`（正则 `^INTAKE-[0-9]{8}-[0-9a-f]{8}$`）：日期为本次生成日，`8hex` 取该次真实 UUID 的前 8 个小写十六进制字符。若不符合，重新调用 `GenerateUUID` 并按其真实返回值生成，不得从合同内容清洗、截取或派生 ID。
 
 **“组成合同的文件”与附件清单的边界**：正文以“组成本合同的文件包括……”列举采购文件、
 答疑/更正公告、中标公告、响应文件、补充协议等程序性材料时，如果没有显式的“附件清单 / 合同附件 /
@@ -811,12 +812,15 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 ### 落盘位置
 
 ```
-<有效工作目录>/contract-review/<contract_object_id>/intake/<intake_id>.receipt.yaml
+<有效工作目录>/contract-review-members/contract-intake/<intake_id>.receipt.yaml
 ```
 
 `<有效工作目录>` 取当前会话的工作目录，**用 `Ls` 实际确认后使用绝对路径**，
-不要在提示词或产物里写死任何用户主目录字面量。旧回执**保留不覆盖**——
-规则更新后要靠它们做历史回放与差异对比。
+不要在提示词或产物里写死任何用户主目录字面量。路径中只能使用本技能生成并核验格式的
+`intake_id`；合同中的原始 `contract_object_id` 仅保留在回执字段，绝不插入、清洗或转换为路径段。若 handoff 提供
+`canonical_artifact_root`，它及其全部子目录仅供读取，成员回执必须按完整路径段确认不在该保留根内；
+`lead_workspace` 只用于定位来源，不得据此自行切换到其他私有目录。若声明的
+`canonical_artifact_root` 恰覆盖上述成员命名空间，或规范化路径、既有目录链接使保留根关系无法确认，记录配置冲突并停止，不得写入保留根或改投其他位置。该成员命名空间只约定产物归属，不是额外安全沙箱；真实写入仍受平台路径授权约束，且不得调用 shell 做路径校验。旧回执**保留不覆盖**——规则更新后要靠它们做历史回放与差异对比。
 
 ### 回执完整结构
 
