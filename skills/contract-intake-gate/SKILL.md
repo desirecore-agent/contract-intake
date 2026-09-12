@@ -106,9 +106,9 @@ metadata:
 **怎么检**
 
 1. 用 `Ls` / `Glob` 列出本次提交的全部文件，逐一 `Read`，再按以下顺序计算摘要：
-   a. 把本次已确认输入逐字冻结为 `submitted_file_paths` 的 canonical 绝对路径列表：用户给出的绝对路径直接复用；相对名只可按当前 effective cwd 确定性解析；不得猜测、缩短、重组/换根或改用旧 workspace。
-   b. 只用 `FileDigest`。`N = 1` 时唯一形状是 `FileDigest({paths: submitted_file_paths[0]})`，其中 `paths` 是裸绝对字符串且 JSON 外观仍按字面路径处理。`N > 1` 时只有当前工具参数明示 `paths_json` 兼容入口才可调用唯一形状 `FileDigest({paths_json: JSON.stringify(submitted_file_paths)})`；这只是参数构造示例，不得调用 shell 或 JS。`paths_json` 必须是该完整集合的 JSON 字符串数组（1–100 项、UTF-8 不超过 64 KiB），解码后逐项等于 `submitted_file_paths`、不多不少，且不得同时传 `paths`、`file_path` 或 `path`。`FileDigest.paths_json` 是发布此批量规则的最小客户端能力要求；入口未提供时立即在既有 S1 finding/`unknown` failure reason 中写 `batch_unverified` 后停止 S1 摘要步骤。
-   c. 批量成功仅在返回 `files` 覆盖完整 `submitted_file_paths` 集合且 `aggregate.file_count = N` 时成立；才可记录完整集合 aggregate。只有 `FileDigest` 明确返回参数形态错误时，才可保持同一原集合和同一 `paths_json` 形状纠正一次；绝不拆成多个单文件调用、缩减集合或以单文件 aggregate 冒充批量。
+   a. 把本次已确认输入逐字冻结为 `submitted_file_paths` 的原始路径列表：用户给出的绝对路径直接复用，不得自动改写；当前团队 cwd 已确认且用户给出不含 `..` 的相对路径（可含子目录）时，直接原样提交工具，由工具按 context.cwd 和既有路径安全校验解析，不得先拼接长 cwd。cwd 不可用时记录该路径不能解析并停止该文件；不得猜测、缩短、重组/换根或改用旧 workspace。
+   b. 只用 `FileDigest`。`N = 1` 时唯一形状是 `FileDigest({paths: submitted_file_paths[0]})`，其中 `paths` 是原样裸字符串且 JSON 外观仍按字面路径处理。`N > 1` 时只有当前工具参数明示 `paths_json` 兼容入口才可调用唯一形状 `FileDigest({paths_json: JSON.stringify(submitted_file_paths)})`；这只是参数构造示例，不得调用 shell 或 JS。`paths_json` 必须是该完整集合的 JSON 字符串数组（1–100 项、UTF-8 不超过 64 KiB），解码后逐项等于 `submitted_file_paths`、不多不少，且不得同时传 `paths`、`file_path` 或 `path`。`FileDigest.paths_json` 是发布此批量规则的最小客户端能力要求；入口未提供时立即在既有 S1 finding/`unknown` failure reason 中写 `batch_unverified` 后停止 S1 摘要步骤。
+   c. 批量成功仅在返回 `files[].path` 逐项对应完整 `submitted_file_paths` 集合、`files[]` 完整且 `aggregate.file_count = N` 时成立；只用工具返回的 `absolute_path` 和 `digest` 登记既有规范绝对路径字段与摘要，不把 `absolute_path` 声称为自动 realpath 身份，才可记录完整集合 aggregate。只有 `FileDigest` 明确返回参数形态错误时，才可保持同一原集合和同一 `paths_json` 形状纠正一次；绝不拆成多个单文件调用、缩减集合或以单文件 aggregate 冒充批量。
    d. 除 c 的明确参数形态错误外，权限拒绝、超限、文件消失、入口不可用、真实执行失败、返回缺项或 aggregate 数不符，都在既有 S1 finding/`unknown` failure reason 中明确 `batch_unverified` 和真实工具原因后停止 S1 摘要步骤；不得跨文件把冻结记为 `true`、编造 SHA-256 或以此为依据通过。本 Agent 的工具权限不含 `Bash`、`PowerShell` 或 `TerminalControl`，不得用 shell 诊断、重试或替代 `FileDigest`。
 2. 把内容切分为**文档部件（part）**：
    - `body` —— 合同正文
