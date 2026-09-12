@@ -7,10 +7,11 @@ import { parse } from 'yaml'
 
 const testsDir = path.dirname(fileURLToPath(import.meta.url))
 const fixture = async (name) => parse(await readFile(path.join(testsDir, 'fixtures', name), 'utf8'))
+const skill = () => readFile(path.join(testsDir, '..', 'SKILL.md'), 'utf8')
 
 function assertSignatureEvidenceContract(receipt) {
   const execution = receipt.freeze.execution_status
-  const allowedEvidenceLevels = new Set(['declared_in_text', 'visual_mark_detected', 'not_covered'])
+  const allowedEvidenceLevels = new Set(['declared_in_text', 'visual_mark_detected', 'not_covered', 'known_unsigned_draft'])
 
   assert.equal(execution.verification_status, 'not_performed')
   for (const party of execution.parties) {
@@ -39,6 +40,12 @@ function assertSignatureEvidenceContract(receipt) {
       assert.equal(party.seal_field, 'not_covered')
       assert.equal(typeof party.seal_evidence.quote, 'string', 'uncovered S5 evidence needs its missing-field quote')
       assert.equal(party.seal_evidence.quote.length > 0, true, 'uncovered S5 quote must not be empty')
+    }
+    if (party.evidence_level === 'known_unsigned_draft') {
+      assert.equal(party.seal_field, 'not_covered')
+      assert.equal(typeof party.seal_evidence.quote, 'string', 'known unsigned draft needs its source quote')
+      assert.equal(party.seal_evidence.quote.length > 0, true, 'known unsigned draft quote must not be empty')
+      assert.equal(party.complete, false)
     }
   }
 }
@@ -165,6 +172,55 @@ test('incomplete S5 fixture remains source-anchored without an ungrounded seal f
   assert.equal(party.seal, undefined)
   assert.equal(party.complete, false)
   assert.ok(receipt.blocks.some(({ code }) => code === 'BLK-SIGNATURE-INCOMPLETE'))
+})
+
+test('known unsigned draft is reviewable only for explicit draft assistance without signature claims', async () => {
+  const receipt = await fixture('unsigned-draft-assistance.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+  const execution = receipt.freeze.execution_status
+  const s5 = receipt.checks.find(({ id }) => id === 'S5')
+  const confirmed = receipt.handoff.confirmed.join('\n')
+
+  assertSignatureEvidenceContract(receipt)
+  assert.equal(receipt.verdict, 'passed')
+  assert.equal(execution.frozen, true)
+  assert.equal(execution.signature_status, 'unsigned_draft')
+  assert.equal(execution.review_purpose, 'draft_negotiation_assistance')
+  assert.match(execution.exception_basis.request_scope_evidence.quote, /草稿|谈判/)
+  assert.equal(path.isAbsolute(execution.exception_basis.material_evidence.input_path), true)
+  assert.equal(Number.isInteger(execution.exception_basis.material_evidence.page), true)
+  assert.equal(typeof execution.exception_basis.material_evidence.locator, 'string')
+  assert.equal(typeof execution.exception_basis.material_evidence.quote, 'string')
+  assert.equal(s5?.status, 'pass')
+  assert.match(`${s5?.finding}\n${confirmed}`, /草稿\/谈判辅助审查/)
+  assert.match(`${s5?.finding}\n${confirmed}`, /不可签署/)
+  assert.doesNotMatch(`${s5?.finding}\n${confirmed}`, /已签署|已生效|真实性已验证|授权已验证/)
+  assert.equal(receipt.handoff.review_purpose, 'draft_negotiation_assistance')
+  assert.deepEqual(receipt.handoff.exception_basis, execution.exception_basis)
+})
+
+test('S5 keeps the unsigned-draft exception bounded to explicit draft assistance', async () => {
+  const text = await skill()
+
+  assert.match(text, /用户在\*\*本次请求\*\*明确要求草稿\/谈判辅助审查/)
+  assert.match(text, /材料自身明确声明当前版本为未签署草稿/)
+  assert.match(text, /混合执行请求/)
+  assert.match(text, /完整记录 `review_purpose` 与两类 `exception_basis` 证据/)
+  assert.match(text, /BLK-EXECUTION-STATUS-CONFLICT/)
+})
+
+test('draft exception leaves every non-qualifying signature condition blocked with its exact code', async () => {
+  for (const [name, code] of [
+    ['draft-status-conflict.receipt.yaml', 'BLK-EXECUTION-STATUS-CONFLICT'],
+    ['draft-label-only.receipt.yaml', 'BLK-SIGNATURE-BLOCK-ABSENT'],
+    ['unsigned-draft-non-assistance.receipt.yaml', 'BLK-SIGNATURE-BLOCK-ABSENT'],
+    ['unsigned-draft-execution-review.receipt.yaml', 'BLK-SIGNATURE-BLOCK-ABSENT'],
+    ['no-signature-status-unknown.receipt.yaml', 'BLK-SIGNATURE-BLOCK-ABSENT'],
+  ]) {
+    const receipt = await fixture(name).then(({ contract_intake_receipt }) => contract_intake_receipt)
+    assert.equal(receipt.verdict, 'blocked', name)
+    assert.equal(receipt.handoff.to, null, name)
+    assert.ok(receipt.blocks.some(({ code: actual }) => actual === code), name)
+  }
 })
 
 test('S5 contract rejects a text claim of a present seal or unsupported authenticity verification', async () => {

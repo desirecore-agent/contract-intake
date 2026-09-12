@@ -1,0 +1,25 @@
+contract_intake_receipt:
+  intake_id: INTAKE-UNSIGNED-DRAFT-EXECUTION
+  skill: contract-intake-gate@1.0.4
+  verdict: blocked
+  verdict_label: 拒绝
+  freeze:
+    execution_status:
+      frozen: false
+      signature_status: unsigned_draft
+      review_purpose: draft_negotiation_assistance_with_execution_review
+      verification_status: not_performed
+      parties: []
+  checks:
+    - id: S5
+      name: 签章状态
+      status: block
+      finding: 用户混合要求草稿辅助与执行/签署审查，未签署草稿不能适用辅助审查例外
+  blocks:
+    - code: BLK-SIGNATURE-BLOCK-ABSENT
+      gate_reason_id: signature-status-unconfirmed
+      severity: block
+  flags: []
+  handoff:
+    to: null
+    confirmed: []

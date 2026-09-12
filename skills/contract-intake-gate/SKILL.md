@@ -395,19 +395,36 @@ blocks:
    `Signature` 有实际签署痕迹（手写名、`/s/ Name` 电子签形式）为准。
 3. 首部声明的 `execution_date_declared` 与落款 `Date` 不一致时，以**两者都必须有值且相等**为通过条件。
 
+### 已知未签署草稿的辅助审查例外
+
+仅当用户在**本次请求**明确要求草稿/谈判辅助审查，且本次材料自身明确声明当前版本为未签署草稿，
+并且没有执行/签署审查要求或已完成落款/签章事实冲突时，才可将签署状态记为 `unsigned_draft`。这不是从缺少落款区、签名或日期反推出来的状态：状态未知、仅称“草稿”却未明确未签、混合执行请求、或材料与声明冲突时，仍按本节原有阻断规则处理。
+
+在这一狭窄情形，S5 冻结的是“当前版本已知未签署”的状态记录，而不是签章字段完整性：
+`freeze.execution_status.frozen: true`、`signature_status: unsigned_draft`、`verification_status: not_performed`，每一方仍用
+`seal_field: not_covered`、带真实来源锚点的 `seal_evidence` 和 `evidence_level: known_unsigned_draft` 记录未签事实。
+S5 可记 `pass`，但回执和交接必须同时记录 `review_purpose: draft_negotiation_assistance` 与同值的 `exception_basis`：
+`request_scope_evidence` 必须逐字引用本轮用户草稿/谈判辅助审查范围，`material_evidence` 必须含材料绝对 `input_path`、`page`、`locator` 与明确未签草稿的原文 `quote`。回执和交接必须明确仅限草稿/谈判辅助审查、不可签署、未验证真实性、授权或合同效力；不得把 `unsigned_draft` 写成已签署、已生效或已验真。
+
+用户要求执行/签署审查，或需要判断签署状态、签署权限、签章真实性或合同效力时，此例外不适用；
+即使材料自称草稿，也必须按原有 S5 门禁阻断。草稿标签与已完成落款/签章事实冲突时，仍为 `BLK-EXECUTION-STATUS-CONFLICT`。
+
 ### 签章证据级别（只描述已见证据）
 
-S5 的 `frozen: true` 只表示签章**字段完整性**已按下列证据冻结，不表示签章真实性、授权、合同效力或实际签署已经验证。对每一方在 `freeze.execution_status.parties[]` **必须**写 `evidence_level`、`seal_evidence` 与 `verification_status`，并在交接的已确认事项中带同样的限定；缺任一结构化证据字段，该方 S5 不得记 `pass`。
+除已知未签署草稿辅助审查例外外，S5 的 `frozen: true` 只表示签章**字段完整性**已按下列证据冻结，不表示签章真实性、授权、合同效力或实际签署已经验证。对每一方在 `freeze.execution_status.parties[]` **必须**写 `evidence_level`、`seal_evidence` 与 `verification_status`，并在交接的已确认事项中带同样的限定；缺任一结构化证据字段，该方 S5 不得记 `pass`。
 
 | `evidence_level` | 可据此陈述 | 不得据此陈述 |
 |---|---|---|
 | `declared_in_text` | 原文文本声明有公章/签名/职务/日期，且字段完整；印章字段须写 `seal_field: declared_in_text`，`seal_evidence` 必须含实际 `input_path`（绝对路径）、`page`、`locator` 与原文 `quote` | `seal: present`；印章、签名、授权或实际签署真实有效；已做图像或电子签验证 |
 | `visual_mark_detected` | 已用本次实际 `UnderstandImage` 观察到印章或签名标记；`seal_evidence` 必须含实际 `input_path`（绝对路径）、`page` 或 `image_index`、`locator`、`visual_description` 和该次 `tool_observation`（`tool: UnderstandImage` + `summary`） | 标记真实、来源可信、授权有效，或已完成电子签验真 |
 | `not_covered` | S5 字段缺失或无法观察；仍须用 `seal_field: not_covered` 和含实际 `input_path`、`page`、`locator`、`quote` 的 `seal_evidence` 说明缺口 | 任何正向签章状态或验真结论 |
+| `known_unsigned_draft` | 仅上述草稿辅助审查例外：材料明确的当前未签署草稿状态，证据仍锚定原文 | 已签署、已生效、真实性、授权或合同效力已验证 |
 
 纯 Markdown / OCR 文本中“已加盖单位公章”、姓名、职务和日期齐备时，使用 `declared_in_text`，`seal_field: declared_in_text`、完整 `seal_evidence` 和 `verification_status: not_performed`，并写明“未做图像或电子签真实性验证”。它仍可通过**字段完整**门禁；不要因缺少图像而误报 `BLK-SIGNATURE-INCOMPLETE`。只有对本次输入实际调用 `UnderstandImage` 并取得可审计观察摘要时，才可使用 `visual_mark_detected`，且 `verification_status` 仍为 `not_performed`；不得编造工具调用、观察摘要或引用。本技能没有验签工具或可信验真结果结构：禁止输出 `authenticity_verified`；外部证明材料最多引用其来源声明，也不得把图像可见升级为验真。
 
 **命中什么算失败**
+
+下表的缺签署人、日期、职务、公章标注或整体无落款区阻断，只有同时满足上述两项草稿辅助审查前提、无执行请求且无冲突，并完整记录 `review_purpose` 与两类 `exception_basis` 证据时才不触发；此豁免只针对这些缺字段，绝不豁免其他 S1–S8 门禁。
 
 | 情形 | 判定 |
 |---|---|
@@ -1018,3 +1035,4 @@ handoff:
 
 - [ ] 回执落盘用的是实际确认过的绝对路径，没有写死用户主目录字面量
 - [ ] 旧回执未被覆盖，本次是新的 `intake_id`
+- [ ] `unsigned_draft` 例外同时在回执与交接记录 `review_purpose: draft_negotiation_assistance`，以及本轮请求范围引用和材料绝对路径、页码、定位、原文的 `exception_basis`
