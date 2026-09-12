@@ -867,6 +867,12 @@ contract_intake_receipt:
     attachment_manifest: {...}          # S4
     execution_status:                   # S5；冻结字段完整性，不等同真实性验证
       frozen: false
+      # 仅已知未签署草稿的辅助审查例外填写以下三项；其他分支省略，绝不虚构草稿例外。
+      signature_status: <unsigned_draft>
+      review_purpose: draft_negotiation_assistance
+      exception_basis:
+        request_scope_evidence: {source: current_user_request, quote: <本轮草稿/谈判辅助审查范围原文>}
+        material_evidence: {input_path: /abs/path/..., page: <页码>, locator: <定位>, quote: <明确未签草稿原文>}
       verification_status: not_performed # 两种允许的证据级别都必须明确未验真
       parties: [...]
   all_frozen: false
@@ -934,6 +940,11 @@ handoff:
   from: contract-intake
   intake_id: INTAKE-20260331-7f3a2c9b
   receipt_path: /abs/path/.../INTAKE-20260331-7f3a2c9b.receipt.yaml
+  # 仅已知未签署草稿的辅助审查例外填写以下两项；其他分支省略，绝不虚构草稿例外。
+  review_purpose: draft_negotiation_assistance
+  exception_basis:
+    request_scope_evidence: {source: current_user_request, quote: <本轮草稿/谈判辅助审查范围原文>}
+    material_evidence: {input_path: /abs/path/..., page: <页码>, locator: <定位>, quote: <明确未签草稿原文>}
 
   object:                               # 交接对象编号
     contract_object_id: YCIT-SAAS-2025-0206

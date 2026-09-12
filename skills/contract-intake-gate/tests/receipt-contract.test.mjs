@@ -222,6 +222,10 @@ test('known unsigned draft is reviewable only for explicit draft assistance with
   assert.doesNotMatch(`${s5?.finding}\n${confirmed}`, /已签署|已生效|真实性已验证|授权已验证/)
   assert.equal(receipt.handoff.review_purpose, 'draft_negotiation_assistance')
   assert.deepEqual(receipt.handoff.exception_basis, execution.exception_basis)
+
+  const text = await skill()
+  assert.match(text, /execution_status:[\s\S]*?# 仅已知未签署草稿的辅助审查例外填写以下三项；其他分支省略，绝不虚构草稿例外。\s+signature_status: <unsigned_draft>\s+review_purpose: draft_negotiation_assistance\s+exception_basis:/)
+  assert.match(text, /receipt_path: \/abs\/path\/\.\.\.\/INTAKE-20260331-7f3a2c9b\.receipt\.yaml\s+# 仅已知未签署草稿的辅助审查例外填写以下两项；其他分支省略，绝不虚构草稿例外。\s+review_purpose: draft_negotiation_assistance\s+exception_basis:/)
 })
 
 test('S5 keeps the unsigned-draft exception bounded to explicit draft assistance', async () => {
