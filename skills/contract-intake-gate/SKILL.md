@@ -109,7 +109,9 @@ metadata:
    a. 把本次已确认输入逐字冻结为 `submitted_file_paths` 的原始路径列表：用户给出的绝对路径直接复用，不得自动改写；当前团队 cwd 已确认且用户给出不含 `..` 的相对路径（可含子目录）时，直接原样提交工具，由工具按 context.cwd 和既有路径安全校验解析，不得先拼接长 cwd。cwd 不可用时记录该路径不能解析并停止该文件；不得猜测、缩短、重组/换根或改用旧 workspace。
    b. 只用 `FileDigest`。`N = 1` 时唯一形状是 `FileDigest({paths: submitted_file_paths[0]})`，其中 `paths` 是原样裸字符串且 JSON 外观仍按字面路径处理。`N > 1` 时只有当前工具参数明示 `paths_json` 兼容入口才可调用唯一形状 `FileDigest({paths_json: JSON.stringify(submitted_file_paths)})`；这只是参数构造示例，不得调用 shell 或 JS。`paths_json` 必须是该完整集合的 JSON 字符串数组（1–100 项、UTF-8 不超过 64 KiB），解码后逐项等于 `submitted_file_paths`、不多不少，且不得同时传 `paths`、`file_path` 或 `path`。`FileDigest.paths_json` 是发布此批量规则的最小客户端能力要求；入口未提供时立即在既有 S1 finding/`unknown` failure reason 中写 `batch_unverified` 后停止 S1 摘要步骤。
    c. 批量成功仅在返回 `files[].path` 逐项对应完整 `submitted_file_paths` 集合、`files[]` 完整且 `aggregate.file_count = N` 时成立；只用工具返回的 `absolute_path` 和 `digest` 登记既有规范绝对路径字段与摘要，不把 `absolute_path` 声称为自动 realpath 身份，才可记录完整集合 aggregate。只有 `FileDigest` 明确返回参数形态错误时，才可保持同一原集合和同一 `paths_json` 形状纠正一次；绝不拆成多个单文件调用、缩减集合或以单文件 aggregate 冒充批量。
-   d. 除 c 的明确参数形态错误外，权限拒绝、超限、文件消失、入口不可用、真实执行失败、返回缺项或 aggregate 数不符，都在既有 S1 finding/`unknown` failure reason 中明确 `batch_unverified` 和真实工具原因后停止 S1 摘要步骤；不得跨文件把冻结记为 `true`、编造 SHA-256 或以此为依据通过。本 Agent 的工具权限不含 `Bash`、`PowerShell` 或 `TerminalControl`，不得用 shell 诊断、重试或替代 `FileDigest`。
+    d. 除 c 的明确参数形态错误外，权限拒绝、超限、文件消失、入口不可用、真实执行失败、返回缺项或 aggregate 数不符，都在既有 S1 finding/`unknown` failure reason 中明确 `batch_unverified` 和真实工具原因后停止 S1 摘要步骤；不得跨文件把冻结记为 `true`、编造 SHA-256 或以此为依据通过。本 Agent 的工具权限不含 `Bash`、`PowerShell` 或 `TerminalControl`，不得用 shell 诊断、重试或替代 `FileDigest`。
+
+**Lead 双集合摘要契约。**只有 `Delegate` 的显式 `handoff.case_id` 可作为本案 case_id；不得从 `intentId`、Work Context、旧回执或成员文本推导。Lead 的 O1 交接必须含 `submitted_file_paths`、`object.documents` 和 `input_inventory`；S1 的完整批量 aggregate 必须逐字等于 `input_inventory.submission_inventory_manifest_digest`；`object.documents` 只能是 Lead 已声明的 current 合同集，且 `object.manifest_digest` 必须逐字等于 `input_inventory.current_contract_manifest_digest`。`submission_inventory_manifest_digest` 与 `current_contract_manifest_digest` 都是既有内容摘要字符串：任一不可得写 `unknown` 并保留各自真实 `*_unavailable_reason`；不得互换、从一个推导另一个，或将当前集合缩成单文件。缺失、值不等、S1 aggregate 不等、case_id 不在显式 handoff，或 object documents 含非 current 集合时，写 `O1_MANIFEST_CONTRACT_INVALID` 并 HOLD。S4 `attachment_manifest_digest` 仅是四字段对账表摘要，必须与两个 FileDigest 集合摘要分开记录、不得作为其别名或比较依据。
 2. 把内容切分为**文档部件（part）**：
    - `body` —— 合同正文
    - `attachment:<编号>` —— 随材料送达的附件正文（如 `attachment:附件二`、`attachment:Exhibit B`）
@@ -860,6 +862,10 @@ contract_intake_receipt:
     object_title: 软件开发外包合同
     submission_mode: single
 
+  input_inventory:                      # Lead O0 摘要；不是 S4 四字段对账表
+    submission_inventory_manifest_digest: <64-lowercase-sha256-or-unknown>
+    current_contract_manifest_digest: <64-lowercase-sha256-or-unknown>
+
   scope: {...}                          # S1
   freeze:                               # 四大冻结
     master_version: {...}               # S2
@@ -952,6 +958,10 @@ handoff:
     submission_mode: version_comparison
     versions: [C06a-saas-v1, C06b-saas-v2]
 
+  input_inventory:                      # 必须与 receipt 中逐字相同；不能由 S4 表摘要替代
+    submission_inventory_manifest_digest: <64-lowercase-sha256-or-unknown>
+    current_contract_manifest_digest: <64-lowercase-sha256-or-unknown>
+
   confirmed:                            # 已确认事项（下游可直接当作事实使用）
     - 主版本已冻结：合同编号 YCIT-SAAS-2025-0206，正文共 7 页，页码 1–7 连续
     - 附件清单已冻结：附件一 V1.0、附件二 SLA-v1.2、附件三 V1.0，编号与名称在正文引用中一致
@@ -983,7 +993,7 @@ handoff:
       - 最终评分与动作建议（属复核出报告 Agent）
     frozen_baseline:
       master_version: YCIT-SAAS-2025-0206
-      attachment_manifest_digest: <四字段对账表的摘要>
+      attachment_manifest_digest: <四字段对账表的摘要；不是 FileDigest 集合摘要>
       page_range: {body: "1-7", "attachment:附件二": "1-2"}
       execution_status: declared_in_text@2025-11-03
     consistency_conclusion_allowed: false
