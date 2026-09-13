@@ -4,9 +4,9 @@ description: 从受权快照计算 S3 与 S7.2 并原子输出回执。
 risk_level: low
 requires_confirmation: false
 executor: script
+command: s3-s7.mjs
 script:
   runtime: node
-  command: s3-s7.mjs
   args: []
   io:
     protocol: snapshot-v1
@@ -52,7 +52,7 @@ input_schema:
           part: { type: string, pattern: '^(body|attachment:.+)$', description: S1 content part label bound to that exact snapshot SHA-256. }
 metadata:
   author: DesireCore
-  version: "1.0.0"
+  version: "1.0.1"
   provider_type: script
 ---
 

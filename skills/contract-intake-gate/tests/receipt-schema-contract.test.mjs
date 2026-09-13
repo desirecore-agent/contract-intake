@@ -228,19 +228,20 @@ test('source wiring requires the deterministic receipt writer and structural val
   const toolFrontmatter = parse(tool.slice(4, tool.indexOf('\n---', 4)))
   assert.ok(toolFrontmatter.description.length <= 80)
   assert.equal(toolFrontmatter.risk_level, 'low')
-  assert.equal(toolFrontmatter.metadata.version, '1.0.0')
+  assert.equal(toolFrontmatter.metadata.version, '1.0.1')
   assert.equal(toolFrontmatter.input_schema.properties.contract_paths.type, 'array')
   assert.equal(toolFrontmatter.input_schema.properties.contract_paths.minItems, 1)
   assert.equal(toolFrontmatter.input_schema.properties.contract_paths.maxItems, 16)
   assert.equal(toolFrontmatter.input_schema.properties.contract_paths.items.type, 'string')
   assert.equal('oneOf' in toolFrontmatter.input_schema.properties.contract_paths, false)
   assert.match(tool, /^risk_level: low$/m)
-  assert.match(tool, /^metadata:\n  author: DesireCore\n  version: "1\.0\.0"\n  provider_type: script$/m)
-  assert.match(tool, /runtime: node\n  command: s3-s7\.mjs\n  args: \[\]/)
+  assert.match(tool, /^metadata:\n  author: DesireCore\n  version: "1\.0\.1"\n  provider_type: script$/m)
+  assert.match(tool, /^command: s3-s7\.mjs$/m)
+  assert.match(tool, /script:\n  runtime: node\n  args: \[\]/)
   assert.match(tool, /protocol: snapshot-v1/)
 })
 
-test('agent, Skill, and schema-valid fixture bind the same Intake release version', async () => {
+test('agent patch and unchanged receipt Skill version remain separately bound', async () => {
   const [agentText, skillText, receipt] = await Promise.all([
     readFile(path.join(testsDir, '..', '..', '..', 'agent.json'), 'utf8'),
     readFile(path.join(testsDir, '..', 'SKILL.md'), 'utf8'),
@@ -249,7 +250,8 @@ test('agent, Skill, and schema-valid fixture bind the same Intake release versio
   const agent = JSON.parse(agentText)
   const skillVersion = skillText.match(/^version: ([0-9]+\.[0-9]+\.[0-9]+)$/m)?.[1]
 
-  assert.equal(agent.version, skillVersion)
+  assert.equal(agent.version, '1.0.9')
+  assert.equal(skillVersion, '1.0.8')
   assert.equal(receipt.contract_intake_receipt.skill, `contract-intake-gate@${skillVersion}`)
 })
 
