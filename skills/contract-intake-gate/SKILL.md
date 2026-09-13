@@ -30,6 +30,7 @@ requires:
     - MathCalc
     - GenerateUUID
     - UnderstandImage
+    - StructuredFileValidate
 metadata:
   author: DesireCore
   version: 1.0.4
@@ -50,15 +51,30 @@ metadata:
 3. **没检查到就显式留白**。检查矩阵里每一项都必须有状态；未覆盖写 `not_covered`，不得因为没提就当 `pass`。
 4. **四大冻结未全部成立时，禁止输出任何"一致 / 无差异 / 差异为 0"结论。**
 
-5. **结构化产物必须先保证 YAML 语法，再谈业务结论。** 机器消费的 `intake.yaml` 与回执
+5. **结构化回执必须先保证 YAML 语法，再谈业务结论。** 本技能定义的机器消费产物是最终
+   `contract_intake_receipt` 回执；没有独立 `intake.yaml` 的路径、模板或数据契约，不得凭空
+   新建、验证或交接第二份同数据产物。回执
    只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
    或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
    禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
-6. **回读声明必须有工具证据。** `Read` 只能证明文件内容已回读，不能证明 YAML 可解析。
-   本 Agent 的工具权限没有 YAML 解析器时，必须明确写“已回读，语法未由解析器验证”，不得
-   声称“YAML 可解析/通过 safe_load”；应在回执中保留待外部验证标记 `yaml_unverified`，并
-   将受影响结论降为 `conditional`，不得发送 `passed`。若未来环境提供专用 YAML 校验工具，
-   只有该工具返回成功后才可移除 `yaml_unverified`。
+6. **回读与结构校验都必须有工具证据。** `Read` 只能证明文件内容已回读，不能证明 YAML
+   可解析。首次写入候选回执前，必须先对本技能目录中的
+   `references/contract-intake-receipt.schema.json` 实际调用 `Read`；该读取失败即如实 HOLD，不得写入候选
+   或交接。本技能随后必须在写入候选回执并 `Read` 后，实际调用一次
+   `StructuredFileValidate({document_path: <最终回执绝对路径>, schema_path: <本技能目录>/references/contract-intake-receipt.schema.json, format: "yaml"})`。
+   该调用仅验证 YAML 与本地 Draft-07 回执结构，不能证明跨文件一致性、法律结论、人类闸门、
+   签章真实性或任何 Compose 保证，也不得把模型声称的 `valid`、工具 hash 或审计字段写入业务回执。
+   现有回执协议没有 `yaml_unverified` 或验证状态字段；不得为了记录本次校验而向业务回执
+   凭空增加字段。工具调用成功且返回 `valid: true` 后，才可把已校验的候选文件作为最终回执并按
+   既有 verdict 规则交接。`valid: false` 时只允许修正本 Agent 刚写入的候选回执一次；修正后必须重新 `Read` 并以相同
+   路径、schema 路径和 `format: "yaml"` 重验。第二次 `valid: false`、任何路径/schema/parser/runtime
+   工具错误或未获结果，均在本轮对话如实报告 `HOLD`、不调用 `Delegate` / `SendMessage` 向下游交接，
+   且不得把未验证或无效候选文件作为回执交付、不得伪造 `passed`、可信回执或 hash。验证成功后
+   不得再对该文件 `Write` / `Edit`；若确有后续写入，先前成功校验立即失效，交付前必须再次 `Read`
+   并重新实际调用校验工具。此验证不改变 S1–S8、四大冻结、verdict、Human Gate
+   与既有跨字段检查；这些业务检查仍必须在本 Agent 中完成。
+   特别是 `unsigned_draft` 的回执与交接 `exception_basis` 必须继续按既有规则逐字段精确镜像
+   比较；本地 Draft-07 只能校验两处各自的结构，不能证明跨位置值相等，不得将结构通过当作镜像通过。
 7. **写入前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
    等自由文本逐个检查引号配对与缩进；无法安全编码时用块标量，不得为了省字删掉证据或改写
    原文。写入后再次 `Read`，保持 `input_file.absolute_path`、SHA 和所有门禁字段不变。

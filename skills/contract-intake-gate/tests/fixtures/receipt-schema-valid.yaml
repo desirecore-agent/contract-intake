@@ -1,0 +1,102 @@
+contract_intake_receipt:
+  intake_id: INTAKE-20260913-a1b2c3d4
+  intake_at: '2026-09-13T10:00:00+08:00'
+  executed_by: contract-intake
+  skill: contract-intake-gate@1.0.4
+  verdict: passed
+  verdict_label: 通过
+  verdict_basis: S1-S8 已完成，无 BLK 或 FLG，四大冻结已建立。
+  object:
+    contract_object_id: C01-DEMO-2026-001
+    object_title: 示例合同
+    submission_mode: single
+  input_inventory:
+    submission_inventory_manifest_digest: unknown
+    current_contract_manifest_digest: unknown
+  scope:
+    submitted_file_paths:
+      - C:/workspace/contracts/c01.md
+  freeze:
+    master_version:
+      frozen: true
+      contract_no: C01-DEMO-2026-001
+    page_range:
+      frozen: true
+      parts: []
+    attachment_manifest:
+      frozen: true
+      declared: []
+    execution_status:
+      frozen: true
+      verification_status: not_performed
+      parties:
+        - party: 甲方
+          name: 示例采购人
+          seal_field: declared_in_text
+          seal_evidence:
+            input_path: C:/workspace/contracts/c01.md
+            page: 3
+            locator: 落款区
+            quote: 已加盖单位公章
+          signatory: 李四
+          title: 法定代表人
+          date: '2026-09-13'
+          complete: true
+          evidence_level: declared_in_text
+          verification_status: not_performed
+  all_frozen: true
+  consistency_conclusion_allowed: true
+  checks:
+    - id: S1
+      name: 受理范围清点
+      status: pass
+    - id: S2
+      name: 主版本冻结
+      status: pass
+    - id: S3
+      name: 页码连续性
+      status: pass
+    - id: S4
+      name: 附件清单对账
+      status: pass
+    - id: S5
+      name: 签章状态
+      status: pass
+    - id: S6
+      name: 占位符扫描
+      status: pass
+    - id: S7
+      name: 一致性
+      status: pass
+    - id: S8
+      name: 版本矩阵对齐
+      status: pass
+  blocks: []
+  flags: []
+  version_matrix:
+    status: aligned
+  alignment_advice: []
+  human_gate: []
+  remediation: []
+  handoff:
+    to: clause-extractor
+    from: contract-intake
+    intake_id: INTAKE-20260913-a1b2c3d4
+    receipt_path: C:/workspace/contract-review-members/contract-intake/INTAKE-20260913-a1b2c3d4.receipt.yaml
+    object:
+      contract_object_id: C01-DEMO-2026-001
+      object_title: 示例合同
+      submission_mode: single
+    input_inventory:
+      submission_inventory_manifest_digest: unknown
+      current_contract_manifest_digest: unknown
+    confirmed:
+      - S1-S8 已执行。
+    pending: []
+    scope:
+      in_scope:
+        - 条款抽取
+      out_of_scope:
+        - 风险打分
+    do_not_pass:
+      - 对话历史

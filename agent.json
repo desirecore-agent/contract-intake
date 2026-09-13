@@ -89,7 +89,8 @@
       "AskUserQuestion",
       "Delegate",
       "SendMessage",
-      "FileDigest"
+      "FileDigest",
+      "StructuredFileValidate"
     ],
     "denied": [
       "Bash",

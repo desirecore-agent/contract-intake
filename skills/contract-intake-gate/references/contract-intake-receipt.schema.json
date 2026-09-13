@@ -1,0 +1,300 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Contract intake final receipt",
+  "description": "Local structural contract for the contract-intake agent's final YAML receipt. It validates only the receipt shape; it does not establish legal conclusions, cross-file consistency, signature authenticity, Human Gate completion, tool provenance, or durable audit evidence.",
+  "type": "object",
+  "required": ["contract_intake_receipt"],
+  "additionalProperties": false,
+  "properties": {
+    "contract_intake_receipt": { "$ref": "#/definitions/receipt", "description": "The only defined structured output of the intake gate." }
+  },
+  "definitions": {
+    "nonEmptyString": { "type": "string", "minLength": 1, "description": "A non-empty textual value recorded by the intake gate." },
+    "nullableString": { "type": ["string", "null"], "description": "A textual value when known, otherwise an explicit null." },
+    "shaOrUnknown": { "type": "string", "pattern": "^(unknown|[a-f0-9]{64})$", "description": "A FileDigest result or the literal unknown; never a model-invented digest." },
+    "sourceAnchor": {
+      "type": "object",
+      "description": "Evidence anchor identifying the observed material location; this is not proof of authenticity.",
+      "required": ["part", "page", "quote"],
+      "additionalProperties": false,
+      "properties": {
+        "part": { "$ref": "#/definitions/nonEmptyString", "description": "The body or attachment part containing the evidence." },
+        "page": { "type": ["integer", "null"], "minimum": 1, "description": "One-based page number when available." },
+        "quote": { "$ref": "#/definitions/nonEmptyString", "description": "Observed source quotation." },
+        "locator": { "type": "string", "description": "Additional stable location detail when a clause or page alone is insufficient." }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "description": "A block or flag outcome with its mandatory evidence and remediation action.",
+      "required": ["code", "gate_reason_id", "severity", "clause", "evidence", "finding", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "pattern": "^(BLK|FLG)-[A-Z0-9-]+$", "description": "Internal block or flag code." },
+        "gate_reason_id": { "type": ["string", "null"], "description": "Published downstream reason identifier, or null for a code without one." },
+        "severity": { "type": "string", "enum": ["block", "flag"], "description": "Whether the finding blocks intake or makes it conditional." },
+        "clause": { "type": ["string", "null"], "description": "Source clause number when available." },
+        "evidence": { "$ref": "#/definitions/sourceAnchor", "description": "Source-grounded evidence for this finding." },
+        "finding": { "$ref": "#/definitions/nonEmptyString", "description": "Explanation of the observed issue." },
+        "action": { "$ref": "#/definitions/nonEmptyString", "description": "Concrete remediation or downstream action." }
+      }
+    },
+    "check": {
+      "type": "object",
+      "description": "One required S1–S8 intake check result.",
+      "required": ["id", "name", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "enum": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"], "description": "Fixed intake check identifier." },
+        "name": { "$ref": "#/definitions/nonEmptyString", "description": "Human-readable check name." },
+        "status": { "type": "string", "enum": ["pass", "conditional", "block", "flag", "not_covered", "fail"], "description": "Recorded outcome; the agent still applies the Skill's verdict rules." },
+        "finding": { "type": "string", "description": "Supporting explanation where the check needs one." }
+      }
+    },
+    "freeze": {
+      "type": "object",
+      "description": "One of the four mandatory frozen input dimensions.",
+      "required": ["frozen"],
+      "additionalProperties": true,
+      "properties": {
+        "frozen": { "type": "boolean", "description": "Whether this dimension was frozen under its applicable Skill rule." }
+      }
+    },
+    "party": {
+      "type": "object",
+      "description": "Per-party S5 signature-field evidence. It never asserts signature authenticity or authority.",
+      "required": ["party", "name", "seal_field", "seal_evidence", "signatory", "title", "date", "complete", "evidence_level", "verification_status"],
+      "additionalProperties": false,
+      "properties": {
+        "party": { "$ref": "#/definitions/nonEmptyString", "description": "Party role." },
+        "name": { "$ref": "#/definitions/nonEmptyString", "description": "Party name as observed." },
+        "seal_field": { "type": "string", "enum": ["declared_in_text", "visual_mark_detected", "not_covered"], "description": "Observed seal-field state; not an authenticity claim." },
+        "seal_evidence": { "$ref": "#/definitions/sealEvidence", "description": "Source anchor for the seal-field state." },
+        "signatory": { "$ref": "#/definitions/nullableString", "description": "Observed signatory name, if present." },
+        "title": { "$ref": "#/definitions/nullableString", "description": "Observed signatory title, if present." },
+        "date": { "$ref": "#/definitions/nullableString", "description": "Observed signing date, if present." },
+        "complete": { "type": "boolean", "description": "Whether the required signature fields are complete under the Skill." },
+        "evidence_level": { "type": "string", "enum": ["declared_in_text", "visual_mark_detected", "not_covered", "known_unsigned_draft"], "description": "Bounded description of available signature evidence." },
+        "verification_status": { "const": "not_performed", "description": "The intake agent records no authenticity verification." },
+        "verification_note": { "type": "string", "description": "Optional limit on the recorded evidence." }
+      }
+    },
+    "sealEvidence": {
+      "type": "object",
+      "description": "Source information for an S5 seal or signature-field observation.",
+      "required": ["input_path", "locator"],
+      "additionalProperties": false,
+      "properties": {
+        "input_path": { "$ref": "#/definitions/nonEmptyString", "description": "Absolute source input path as returned or retained by the permitted workflow." },
+        "page": { "type": "integer", "minimum": 1, "description": "One-based source page when evidence is page-based." },
+        "image_index": { "type": "integer", "minimum": 0, "description": "Image index when an actual image observation is used." },
+        "locator": { "$ref": "#/definitions/nonEmptyString", "description": "Source location detail." },
+        "quote": { "type": "string", "description": "Original text quotation for text or uncovered evidence." },
+        "visual_description": { "type": "string", "description": "Description of a visible mark; never a verification claim." },
+        "tool_observation": {
+          "type": "object",
+          "description": "Actual UnderstandImage observation when visual_mark_detected is used.",
+          "required": ["tool", "summary"],
+          "additionalProperties": false,
+          "properties": {
+            "tool": { "const": "UnderstandImage", "description": "The only permitted tool name for a visual observation." },
+            "summary": { "$ref": "#/definitions/nonEmptyString", "description": "Actual tool observation summary." }
+          }
+        }
+      },
+      "anyOf": [
+        { "type": "object", "properties": { "page": {} }, "required": ["page"] },
+        { "type": "object", "properties": { "image_index": {} }, "required": ["image_index"] }
+      ]
+    },
+    "executionStatus": {
+      "type": "object",
+      "description": "S5 execution-status freeze. Its structural presence does not replace the Skill's signature and Human Gate rules.",
+      "required": ["frozen", "verification_status", "parties"],
+      "additionalProperties": false,
+      "properties": {
+        "frozen": { "type": "boolean", "description": "Whether execution status was frozen under S5." },
+        "signature_status": { "type": "string", "enum": ["unsigned_draft", "unknown", "conflicting"], "description": "Special S5 state when recorded." },
+        "review_purpose": { "type": "string", "description": "Restricted draft-assistance purpose when applicable." },
+        "exception_basis": { "$ref": "#/definitions/exceptionBasis", "description": "Required evidence for the narrow unsigned-draft exception." },
+        "verification_status": { "const": "not_performed", "description": "No signature authenticity or authority verification is performed." },
+        "parties": { "type": "array", "items": { "$ref": "#/definitions/party" }, "description": "Every party's recorded S5 evidence." }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "signature_status": { "const": "unsigned_draft" } }, "required": ["signature_status"] },
+          "then": { "type": "object", "properties": { "review_purpose": { "const": "draft_negotiation_assistance" }, "exception_basis": { "$ref": "#/definitions/exceptionBasis" } }, "required": ["review_purpose", "exception_basis"] }
+        }
+      ]
+    },
+    "exceptionBasis": {
+      "type": "object",
+      "description": "Paired request and material evidence required only for the defined unsigned-draft assistance exception.",
+      "required": ["request_scope_evidence", "material_evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "request_scope_evidence": {
+          "type": "object",
+          "required": ["source", "quote"],
+          "additionalProperties": false,
+          "properties": {
+            "source": { "const": "current_user_request", "description": "The only acceptable request-evidence source." },
+            "quote": { "$ref": "#/definitions/nonEmptyString", "description": "Verbatim request scope evidence." }
+          }
+        },
+        "material_evidence": {
+          "type": "object",
+          "required": ["input_path", "page", "locator", "quote"],
+          "additionalProperties": false,
+          "properties": {
+            "input_path": { "$ref": "#/definitions/nonEmptyString", "description": "Source material path." },
+            "page": { "type": "integer", "minimum": 1, "description": "Source page." },
+            "locator": { "$ref": "#/definitions/nonEmptyString", "description": "Source location." },
+            "quote": { "$ref": "#/definitions/nonEmptyString", "description": "Material statement that it is an unsigned draft." }
+          }
+        }
+      }
+    },
+    "pending": {
+      "type": "object",
+      "description": "A disclosed conditional handoff item; it does not authorize downstream self-resolution.",
+      "required": ["id", "from_flag", "must_escalate", "statement", "required_downstream_action"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/nonEmptyString", "description": "Stable pending identifier." },
+        "from_flag": { "type": "string", "pattern": "^FLG-[A-Z0-9-]+$", "description": "Flag that caused this pending item." },
+        "must_escalate": { "type": "boolean", "description": "Whether downstream escalation is mandatory." },
+        "statement": { "$ref": "#/definitions/nonEmptyString", "description": "Bounded pending statement." },
+        "required_downstream_action": { "$ref": "#/definitions/nonEmptyString", "description": "Required next action." },
+        "evidence": { "$ref": "#/definitions/sourceAnchor", "description": "Optional source anchor for the pending item." }
+      }
+    },
+    "handoff": {
+      "type": "object",
+      "description": "Defined downstream handoff fields. The agent's verdict rules determine whether it may be sent.",
+      "required": ["to", "from", "intake_id", "receipt_path", "object", "input_inventory", "confirmed", "pending", "scope", "do_not_pass"],
+      "additionalProperties": false,
+      "properties": {
+        "to": { "type": ["string", "null"], "enum": ["clause-extractor", null], "description": "Downstream target, or null for a blocked receipt." },
+        "from": { "const": "contract-intake", "description": "The source agent." },
+        "intake_id": { "type": "string", "pattern": "^INTAKE-[0-9]{8}-[0-9a-f]{8}$", "description": "The generated intake identifier mirrored from the receipt." },
+        "receipt_path": { "$ref": "#/definitions/nonEmptyString", "description": "Absolute path to this final receipt." },
+        "object": { "$ref": "#/definitions/objectIdentity", "description": "Reviewed contract identity." },
+        "input_inventory": { "$ref": "#/definitions/inputInventory", "description": "Lead-provided two-digest input inventory." },
+        "confirmed": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" }, "description": "Facts downstream may use subject to the existing Skill limits." },
+        "pending": { "type": "array", "items": { "$ref": "#/definitions/pending" }, "description": "Unresolved flag-backed handoff items." },
+        "scope": { "type": "object", "minProperties": 1, "description": "Declared downstream scope and frozen baseline." },
+        "do_not_pass": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" }, "minItems": 1, "description": "Information prohibited from handoff." },
+        "review_purpose": { "const": "draft_negotiation_assistance", "description": "The only permitted unsigned-draft assistance purpose when applicable." },
+        "exception_basis": { "$ref": "#/definitions/exceptionBasis", "description": "Mirrored unsigned-draft exception evidence when applicable." }
+      }
+    },
+    "objectIdentity": {
+      "type": "object",
+      "description": "Contract object identity supplied to the intake gate.",
+      "required": ["contract_object_id", "object_title", "submission_mode"],
+      "additionalProperties": false,
+      "properties": {
+        "contract_object_id": { "$ref": "#/definitions/nonEmptyString", "description": "Contract object identifier; never used as a path segment." },
+        "object_title": { "$ref": "#/definitions/nonEmptyString", "description": "Contract title." },
+        "submission_mode": { "type": "string", "enum": ["single", "version_comparison"], "description": "Whether one version or a comparison was submitted." },
+        "versions": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" }, "description": "Version labels for version-comparison submissions." }
+      }
+    },
+    "inputInventory": {
+      "type": "object",
+      "description": "The two distinct Lead O0 FileDigest values; neither is the S4 attachment-manifest digest.",
+      "required": ["submission_inventory_manifest_digest", "current_contract_manifest_digest"],
+      "additionalProperties": false,
+      "properties": {
+        "submission_inventory_manifest_digest": { "$ref": "#/definitions/shaOrUnknown", "description": "Digest of the complete submitted-file inventory." },
+        "current_contract_manifest_digest": { "$ref": "#/definitions/shaOrUnknown", "description": "Digest of the Lead-declared current contract set." }
+      }
+    },
+    "humanGate": {
+      "type": "object",
+      "description": "A legal or human action that the intake agent cannot replace.",
+      "required": ["trigger", "reason", "at"],
+      "additionalProperties": false,
+      "properties": {
+        "trigger": { "$ref": "#/definitions/nonEmptyString", "description": "Human Gate trigger." },
+        "reason": { "$ref": "#/definitions/nonEmptyString", "description": "Reason human action remains required." },
+        "at": { "$ref": "#/definitions/sourceAnchor", "description": "Source anchor for the Human Gate." }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "description": "Final intake receipt. Structural validity is not legal or signature proof.",
+      "required": ["intake_id", "intake_at", "executed_by", "skill", "verdict", "verdict_label", "verdict_basis", "object", "input_inventory", "scope", "freeze", "all_frozen", "consistency_conclusion_allowed", "checks", "blocks", "flags", "version_matrix", "alignment_advice", "human_gate", "remediation", "handoff"],
+      "additionalProperties": false,
+      "properties": {
+        "intake_id": { "type": "string", "pattern": "^INTAKE-[0-9]{8}-[0-9a-f]{8}$", "description": "ASCII intake identifier generated from GenerateUUID under the Skill rule." },
+        "intake_at": { "$ref": "#/definitions/nonEmptyString", "description": "Recorded local intake time." },
+        "executed_by": { "const": "contract-intake", "description": "Executing agent identity." },
+        "skill": { "type": "string", "pattern": "^contract-intake-gate@[0-9]+\\.[0-9]+\\.[0-9]+$", "description": "Applied intake skill version." },
+        "verdict": { "type": "string", "enum": ["passed", "conditional", "blocked"], "description": "Mechanical S1–S8 verdict." },
+        "verdict_label": { "type": "string", "enum": ["通过", "条件通过", "拒绝"], "description": "Human-readable verdict label." },
+        "verdict_basis": { "$ref": "#/definitions/nonEmptyString", "description": "Explanation grounded in the recorded checks and findings." },
+        "object": { "$ref": "#/definitions/objectIdentity", "description": "Contract identity." },
+        "input_inventory": { "$ref": "#/definitions/inputInventory", "description": "Separate submission and current-contract FileDigest values." },
+        "scope": { "type": "object", "minProperties": 1, "description": "S1 observed scope facts." },
+        "freeze": {
+          "type": "object",
+          "description": "All four mandatory frozen dimensions.",
+          "required": ["master_version", "page_range", "attachment_manifest", "execution_status"],
+          "additionalProperties": false,
+          "properties": {
+            "master_version": { "$ref": "#/definitions/freeze", "description": "S2 master-version freeze." },
+            "page_range": { "$ref": "#/definitions/freeze", "description": "S3 page-range freeze." },
+            "attachment_manifest": { "$ref": "#/definitions/freeze", "description": "S4 attachment-manifest freeze." },
+            "execution_status": { "$ref": "#/definitions/executionStatus", "description": "S5 execution-status freeze." }
+          }
+        },
+        "all_frozen": { "type": "boolean", "description": "Whether every mandatory freeze is frozen." },
+        "consistency_conclusion_allowed": { "type": "boolean", "description": "Whether the Skill permits a consistency conclusion." },
+        "checks": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/check" },
+          "allOf": [
+            { "contains": { "type": "object", "properties": { "id": { "const": "S1" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S2" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S3" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S4" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S5" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S6" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S7" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S8" } }, "required": ["id"] } }
+          ],
+          "description": "Exactly one recorded check for each fixed S1–S8 stage." 
+        },
+        "blocks": { "type": "array", "items": { "allOf": [{ "$ref": "#/definitions/finding" }, { "type": "object", "properties": { "code": { "type": "string", "pattern": "^BLK-" }, "severity": { "const": "block" } }, "required": ["code", "severity"] }] }, "description": "All BLK findings." },
+        "flags": { "type": "array", "items": { "allOf": [{ "$ref": "#/definitions/finding" }, { "type": "object", "properties": { "code": { "type": "string", "pattern": "^FLG-" }, "severity": { "const": "flag" } }, "required": ["code", "severity"] }] }, "description": "All FLG findings." },
+        "version_matrix": { "type": "object", "minProperties": 1, "description": "S8 version-matrix result." },
+        "alignment_advice": { "type": "array", "items": { "type": "object" }, "description": "S8 alignment advice entries." },
+        "human_gate": { "type": "array", "items": { "$ref": "#/definitions/humanGate" }, "description": "Human actions not replaced by the intake agent." },
+        "remediation": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" }, "description": "Imperative remediation list, required especially for blocked results." },
+        "handoff": { "$ref": "#/definitions/handoff", "description": "Defined downstream handoff payload." }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "passed" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "verdict_label": { "const": "通过" }, "all_frozen": { "const": true }, "freeze": { "type": "object", "properties": { "master_version": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "page_range": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "execution_status": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] } }, "required": ["master_version", "page_range", "attachment_manifest", "execution_status"] }, "blocks": { "type": "array", "maxItems": 0 }, "flags": { "type": "array", "maxItems": 0 }, "handoff": { "type": "object", "properties": { "to": { "const": "clause-extractor" } }, "required": ["to"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "conditional" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "verdict_label": { "const": "条件通过" }, "blocks": { "type": "array", "maxItems": 0 }, "flags": { "type": "array", "minItems": 1 }, "handoff": { "type": "object", "properties": { "to": { "const": "clause-extractor" } }, "required": ["to"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "blocked" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "verdict_label": { "const": "拒绝" }, "blocks": { "type": "array", "minItems": 1 }, "remediation": { "type": "array", "minItems": 1 }, "handoff": { "type": "object", "properties": { "to": { "const": null } }, "required": ["to"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "execution_status": { "type": "object", "properties": { "signature_status": { "const": "unsigned_draft" } }, "required": ["signature_status"] } }, "required": ["execution_status"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "handoff": { "type": "object", "properties": { "review_purpose": { "const": "draft_negotiation_assistance" }, "exception_basis": { "$ref": "#/definitions/exceptionBasis" } }, "required": ["review_purpose", "exception_basis"] } } }
+        }
+      ]
+    }
+  }
+}
