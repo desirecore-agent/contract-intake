@@ -719,7 +719,7 @@ flags:
 
 | 维度 | 取值来源 | 不一致时的动作 |
 |---|---|---|
-| `skill_version` | 本技能 frontmatter 的 `version` | 标记 + 建议**重跑**本次受理 |
+| `skill_version` | 本次实际加载的本技能 frontmatter `version` | 标记 + 建议**重跑**本次受理 |
 | `server_version` | 运行时上报的服务版本 | 标记 + 建议**人工确认** |
 | `knowledge_base_version` | 团队知识库 / 业务本体的版本戳 | 标记 + 建议**重算历史样本** |
 | `jurisdiction_pack_version` | 法域规则包版本（如 `cn-v3` / `us-v2`） | **与法域线索不一致时阻断** |
@@ -761,7 +761,8 @@ flags:
 
 ```yaml
 version_matrix:
-  skill_version:             {current: "1.0.1",      expected: "1.0.1",  aligned: true}
+  # 本次实际加载的 contract-intake-gate frontmatter version；示例占位符不得照抄为运行时值。
+  skill_version:             {current: "<当前实际加载本技能 frontmatter version>", expected: "<当前实际加载本技能 frontmatter version>", aligned: true}
   server_version:            {current: "10.0.133",   expected: "10.0.133", aligned: true}
   knowledge_base_version:    {current: "2026-07-18", expected: "2026-08-20", aligned: false}
   jurisdiction_pack_version: {current: "us-v2",      expected: "cn-v3",  aligned: false}
@@ -870,7 +871,7 @@ contract_intake_receipt:
   intake_id: INTAKE-20260331-7f3a2c9b
   intake_at: 2026-03-31T09:12:04+08:00
   executed_by: contract-intake          # 执行 Agent
-  skill: contract-intake-gate@1.0.4
+  skill: contract-intake-gate@<当前实际加载本技能 frontmatter version>  # 运行时逐字绑定，示例占位符不得照抄
   verdict: blocked                      # passed | conditional | blocked
   verdict_label: 拒绝                   # 通过 | 条件通过 | 拒绝；必须与 verdict 对应
   verdict_basis: "命中 5 类阻断：placeholder-unfilled(×9) / page-discontinuity / attachment-missing / version-mismatch / party-name-inconsistency"
