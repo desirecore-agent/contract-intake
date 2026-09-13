@@ -1,0 +1,20 @@
+contract_intake_receipt:
+  intake_id: INTAKE-MANIFEST-ABSENT-MISMATCH
+  skill: contract-intake-gate@1.0.5
+  verdict: blocked
+  freeze:
+    attachment_manifest:
+      frozen: false
+      status: blocked
+      declared: null
+      referenced: [{no: A1, name: null, version: v1, doc_no: null}]
+      delivered: [{no: A1, name: 技术及验收标准, version: v2, doc_no: null}]
+  blocks:
+    - code: BLK-ATTACHMENT-VERSION-CONFLICT
+      gate_reason_id: version-mismatch
+      severity: block
+      clause: '9'
+      evidence: {part: body, page: 2, quote: '附件A1-v1'}
+      finding: 正文引用A1-v1与实际送达A1-v2不一致
+      action: 统一附件版本后重新提交
+  handoff: {to: null}

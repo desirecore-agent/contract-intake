@@ -1,6 +1,6 @@
 contract_intake_receipt:
   intake_id: INTAKE-UNSIGNED-DRAFT-ASSISTANCE
-  skill: contract-intake-gate@1.0.4
+  skill: contract-intake-gate@1.0.5
   verdict: passed
   verdict_label: 通过
   freeze:

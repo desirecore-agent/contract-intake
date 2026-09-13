@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.4
+version: 1.0.5
 type: procedural
 risk_level: low
 status: enabled
@@ -33,8 +33,8 @@ requires:
     - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.4
-  updated_at: '2026-09-10'
+  version: 1.0.5
+  updated_at: '2026-09-13'
 ---
 
 # 合同输入治理闸门
@@ -111,6 +111,7 @@ metadata:
 | `party-name-inconsistency` | 是 | `BLK-PARTY-INCONSISTENT` / `BLK-PARTY-ROLE-CONFLICT` |
 | `amount-in-words-mismatch` | **否** | `FLG-AMOUNT-IN-WORDS-MISMATCH` |
 | `attachment-manifest-incomplete` | **否** | `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` |
+| `attachment-manifest-absent` | **否** | `FLG-ATTACHMENT-MANIFEST-ABSENT` |
 
 表外的内部编码（`BLK-OBJECT-UNIDENTIFIED`、`BLK-JURISDICTION-PACK-MISMATCH` 等）照常影响门禁结论，
 输出时 `gate_reason_id` 写 `null` 并在 `finding` 里说清楚。
@@ -299,6 +300,16 @@ blocks:
    连同引用处写明的版本标识一并记录。
 3. **`delivered`（随材料送达的附件正文）** —— 来自 S1 的部件表。
 
+三组记录必须保留各自的来源锚点，绝不把正文引用或已交付附件的标题复制成
+`declared`。`declared` 只陈述正式附件清单已经声明的事实；`referenced` 只陈述正文
+引用；`delivered` 只陈述实际收到并可读的附件部件及其自身标识。
+回执的 `freeze.attachment_manifest` 必须始终写这三组字段与 `status`：正式清单为
+`formal_list`，没有任何附件引用或附件为 `no_attachments`，R9 为
+`authority_list_unavailable`，本节新增分支为 `missing_formal_list`，阻断事实为 `blocked`。
+`declared` 在 `passed` 或 `conditional` 时必须有非空编号、名称和来源锚点；`referenced`
+只记录正文实际可见字段，名称未知时保持 `null`，不得从 `delivered` 推导。新增唯一交付关联中
+`referenced` 必须有非空编号、版本和来源锚点，而 `delivered` 才必须有完整编号、名称、版本和来源锚点。
+
 **对账规则（顺序不可换）**
 
 | # | 规则 | 判定 |
@@ -312,6 +323,28 @@ blocks:
 | R7 | `declared` 条目**未随材料送达正文** | `SCOPE-ATTACHMENT-BODY-ABSENT`（**不是缺陷，不影响门禁结论**） |
 | R8 | 版本对比模式下，两版 `declared` 的同编号条目 `version` 或 `doc_no` 不同 | `FLG-ATTACHMENT-VERSION-CHANGED` + `must_escalate: true` |
 | R9 | 正文明确指向独立的**权威附件清单**（如“完整附件清单见另附《合同附件目录》”），但该清单未随材料送达，因而无法确定完整 `declared` 集合 | `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` + `PEND-001.must_escalate: true` |
+
+### 无正式附件清单时的唯一交付关联（新增，不改变 R1–R9）
+
+本分支只在材料**没有**正式附件清单、也没有“完整附件清单见另附”等单独权威清单
+声明时适用。它不是把 `delivered` 转写为 `declared`，也不声称完整附件集合已经冻结。
+
+只有同时满足以下条件，才可写 `conditional`：
+
+1. 每一个 `referenced` 附件都能与**唯一一个**实际 `delivered` 部件关联；
+2. 两侧可见的附件编号和版本标识逐字一致；附件正文自身有可回查的编号、名称和版本锚点；
+3. 每个关联同时保留正文引用锚点与已交付附件身份锚点，且没有额外未匹配的正文附件引用。
+
+此时写 `declared: null`、`attachment_manifest.frozen: false`、`all_frozen: false`、
+`FLG-ATTACHMENT-MANIFEST-ABSENT`（`gate_reason_id: attachment-manifest-absent`）和唯一
+`PEND-004`（`from_flag` 同该 FLG，`must_escalate: true`）。交接必须要求人工补齐或确认
+正式附件清单；下游只能覆盖已唯一关联的附件内容，所有整体附件范围结论仍为
+`not_covered`。
+
+任一正文引用无已交付匹配、对应多个候选、编号或版本冲突、附件自身身份不完整，均不得
+进入本分支：按已有 `BLK-ATTACHMENT-MISSING`、`BLK-ATTACHMENT-VERSION-CONFLICT` 或
+`BLK-ATTACHMENT-UNIDENTIFIED` 如实阻断。正文明确另有权威清单却未送达时，仍只走 R9；
+不得改用本分支。无正文附件引用且无附件的空集合可以正常通过。
 
 > ⚠️ **R5/R6 的分界必须守住。**"附件一《岗位职责说明书》""Exhibit A — Statement of Work Template"
 > 没有版本号，是常见且合法的写法。**只记 `SCOPE-`，既不阻断也不把门禁结论降为 `conditional`。**
@@ -352,7 +385,7 @@ R9 命中且不存在任一 `BLK-*` 时，必须同时满足以下条件：
 
 `must_escalate` **不**是全部 `FLG-*` 或全部未送达附件的通用推导。R8 继续按既有版本变化语义
 单独升级；R7 的 `SCOPE-ATTACHMENT-BODY-ABSENT` 仍可在无 `BLK-*` / `FLG-*` 时得到 `passed`，
-且不得生成 `PEND-001`。
+且不得生成 `PEND-001` 或 `PEND-004`。`PEND-004` 只属于上节的无正式清单唯一交付关联。
 
 **失败后输出什么**
 
@@ -360,6 +393,7 @@ R9 命中且不存在任一 `BLK-*` 时，必须同时满足以下条件：
 freeze:
   attachment_manifest:
     frozen: false
+    status: blocked
     declared:
       - {no: 附件一, name: 接口对接清单, version: null, doc_no: null}
       - {no: 附件二, name: 技术规格书, version: V1.1, doc_no: null}
@@ -1053,6 +1087,8 @@ handoff:
 - [ ] 附件正文未随材料送达只记 `SCOPE-`，没有报成 `attachment-missing`
 - [ ] 仅在未取得权威附件清单、无法确定完整 `declared` 集合时才报 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE`；
       普通附件正文未送达、R6 与 R8 不得误用该标记或生成 `PEND-001`
+- [ ] 没有正式附件清单时，未把正文或交付标题伪写入 `declared`；只有逐项唯一交付关联才使用
+      `FLG-ATTACHMENT-MANIFEST-ABSENT` + `PEND-004`，并保留 `declared: null`、冻结未完成和整体范围 `not_covered`
 - [ ] 身份证 / 手机号 / 邮箱的星号掩码没有被判成占位符
 - [ ] 首部定义过的简称没有被误报为主体不一致
 - [ ] 英文合同没有因为"没有公章字样"被判缺签章

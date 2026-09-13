@@ -1,47 +1,119 @@
 contract_intake_receipt:
-  intake_id: INTAKE-R02-MANIFEST-INCOMPLETE
-  skill: contract-intake-gate@1.0.3
+  intake_id: INTAKE-20260913-a02c0de1
+  intake_at: '2026-09-13T10:00:00+08:00'
+  executed_by: contract-intake
+  skill: contract-intake-gate@1.0.5
   verdict: conditional
   verdict_label: 条件通过
+  verdict_basis: 权威附件清单未随材料送达，附件范围只能条件通过。
+  object:
+    contract_object_id: R02-DEMO-2026-001
+    object_title: R02 附件清单不完整合同
+    submission_mode: single
+  input_inventory:
+    submission_inventory_manifest_digest: unknown
+    current_contract_manifest_digest: unknown
+  scope:
+    submitted_file_paths:
+      - C:/workspace/contracts/c01.md
   freeze:
+    master_version:
+      frozen: true
+      contract_no: R02-DEMO-2026-001
+    page_range:
+      frozen: true
+      parts: []
     attachment_manifest:
       frozen: false
+      status: authority_list_unavailable
       declared: null
+      referenced: []
+      delivered: []
       authority: '正文第 13.3 条指定另附《合同附件目录》为完整附件清单'
+    execution_status:
+      frozen: true
+      verification_status: not_performed
+      parties:
+        - party: 甲方
+          name: 示例采购人
+          seal_field: declared_in_text
+          seal_evidence:
+            input_path: C:/workspace/contracts/c01.md
+            page: 3
+            locator: 落款区
+            quote: 已加盖单位公章
+          signatory: 李四
+          title: 法定代表人
+          date: '2026-09-13'
+          complete: true
+          evidence_level: declared_in_text
+          verification_status: not_performed
   all_frozen: false
+  consistency_conclusion_allowed: true
+  checks:
+    - id: S1
+      name: 受理范围清点
+      status: pass
+    - id: S2
+      name: 主版本冻结
+      status: pass
+    - id: S3
+      name: 页码连续性
+      status: pass
+    - id: S4
+      name: 附件清单对账
+      status: conditional
+    - id: S5
+      name: 签章状态
+      status: pass
+    - id: S6
+      name: 占位符扫描
+      status: pass
+    - id: S7
+      name: 一致性
+      status: pass
+    - id: S8
+      name: 版本矩阵对齐
+      status: pass
+  blocks: []
   flags:
     - code: FLG-ATTACHMENT-MANIFEST-INCOMPLETE
       gate_reason_id: attachment-manifest-incomplete
       severity: flag
       clause: '13.3'
-      evidence:
-        part: body
-        page: 7
-        quote: '完整附件清单见另附《合同附件目录》'
+      evidence: {part: body, page: 1, quote: '完整附件清单见另附《合同附件目录》'}
       finding: 权威附件清单未随本次材料送达，无法冻结完整 declared 集合
       action: 补齐权威附件清单后重新确认附件范围
-  blocks: []
+  version_matrix:
+    status: aligned
+  alignment_advice: []
+  human_gate: []
+  remediation: []
   handoff:
     to: clause-extractor
     from: contract-intake
-    intake_id: INTAKE-R02-MANIFEST-INCOMPLETE
-    receipt_path: C:/workspace/contract-review/R02/intake/INTAKE-R02-MANIFEST-INCOMPLETE.receipt.yaml
+    case_id: R02-DEMO-2026-001
+    intake_id: INTAKE-20260913-a02c0de1
+    receipt_path: C:/workspace/contract-review-members/contract-intake/INTAKE-20260913-a02c0de1.receipt.yaml
     object:
       contract_object_id: R02-DEMO-2026-001
       object_title: R02 附件清单不完整合同
       submission_mode: single
+    input_inventory:
+      submission_inventory_manifest_digest: unknown
+      current_contract_manifest_digest: unknown
     confirmed:
-      - 正文、页码范围与签章状态已冻结；附件清单完整集合尚未取得
-    scope:
-      in_scope:
-        - 条款抽取（含附件相关条款）
-      out_of_scope:
-        - 风险打分
-      frozen_baseline:
-        attachment_manifest: not_available
+      - S1-S8 已执行。
     pending:
       - id: PEND-001
         from_flag: FLG-ATTACHMENT-MANIFEST-INCOMPLETE
         must_escalate: true
         statement: 未取得权威附件清单，未知附件不得视为已覆盖
         required_downstream_action: 人工补齐并确认权威附件清单；未知附件相关检查项标为 not_covered，不得推测
+    scope:
+      in_scope:
+        - 条款抽取（含附件相关条款）
+      out_of_scope:
+        - 风险打分
+    do_not_pass:
+      - 对话历史

@@ -8,7 +8,7 @@ import { parse } from 'yaml'
 
 const testsDir = path.dirname(fileURLToPath(import.meta.url))
 const schemaPath = path.join(testsDir, '..', 'references', 'contract-intake-receipt.schema.json')
-const fixture = async () => parse(await readFile(path.join(testsDir, 'fixtures', 'receipt-schema-valid.yaml'), 'utf8'))
+const fixture = async (name = 'receipt-schema-valid.yaml') => parse(await readFile(path.join(testsDir, 'fixtures', name), 'utf8'))
 const schema = async () => JSON.parse(await readFile(schemaPath, 'utf8'))
 
 test('release-owned final receipt schema accepts the defined receipt and rejects missing S1-S8 evidence', async () => {
@@ -41,6 +41,70 @@ test('release-owned final receipt schema accepts the defined receipt and rejects
   const falseFreezeInPassedReceipt = structuredClone(receipt)
   falseFreezeInPassedReceipt.contract_intake_receipt.freeze.page_range.frozen = false
   assert.equal(validate(falseFreezeInPassedReceipt), false)
+
+  const source = { part: 'body', page: 1, quote: '附件A1-v1' }
+  const nullIdentityInPassedReceipt = structuredClone(receipt)
+  nullIdentityInPassedReceipt.contract_intake_receipt.freeze.attachment_manifest.status = 'formal_list'
+  nullIdentityInPassedReceipt.contract_intake_receipt.freeze.attachment_manifest.declared = [{ no: 'A1', name: null, version: 'v1', doc_no: null, source }]
+  assert.equal(validate(nullIdentityInPassedReceipt), false)
+
+  const blankIdentityInPassedReceipt = structuredClone(receipt)
+  blankIdentityInPassedReceipt.contract_intake_receipt.freeze.attachment_manifest.status = 'formal_list'
+  blankIdentityInPassedReceipt.contract_intake_receipt.freeze.attachment_manifest.declared = [{ no: 'A1', name: '', version: 'v1', doc_no: null, source }]
+  assert.equal(validate(blankIdentityInPassedReceipt), false)
+
+  const missingFormalList = structuredClone(receipt)
+  const missingFormalReceipt = missingFormalList.contract_intake_receipt
+  missingFormalReceipt.verdict = 'conditional'
+  missingFormalReceipt.verdict_label = '条件通过'
+  missingFormalReceipt.all_frozen = false
+  missingFormalReceipt.freeze.attachment_manifest = {
+    frozen: false,
+    status: 'missing_formal_list',
+    declared: null,
+    referenced: [{ no: 'A1', name: null, version: 'v1', doc_no: null, source }],
+    delivered: [{ no: 'A1', name: '技术及验收标准', version: 'v1', doc_no: null, source: { part: 'attachment:附件A1', page: 1, quote: '附件编号：A1；附件版本：v1' } }],
+  }
+  missingFormalReceipt.flags = [{
+    code: 'FLG-ATTACHMENT-MANIFEST-ABSENT', gate_reason_id: 'attachment-manifest-absent', severity: 'flag', clause: '9', evidence: source,
+    finding: 'No formal attachment list was submitted.', action: 'Confirm the formal attachment list.',
+  }]
+  missingFormalReceipt.handoff.pending = [{
+    id: 'PEND-004', from_flag: 'FLG-ATTACHMENT-MANIFEST-ABSENT', must_escalate: true,
+    statement: 'The formal list is absent.', required_downstream_action: 'Keep overall attachment scope not_covered.',
+  }]
+  assert.equal(validate(missingFormalList), true, JSON.stringify(validate.errors))
+
+  const missingFormalNullName = structuredClone(missingFormalList)
+  missingFormalNullName.contract_intake_receipt.freeze.attachment_manifest.declared = [{ no: 'A1', name: null, version: 'v1', doc_no: null, source }]
+  assert.equal(validate(missingFormalNullName), false)
+
+  const missingFormalWithoutPending = structuredClone(missingFormalList)
+  missingFormalWithoutPending.contract_intake_receipt.handoff.pending = []
+  assert.equal(validate(missingFormalWithoutPending), false)
+
+  const authorityListUnavailable = structuredClone(missingFormalList)
+  authorityListUnavailable.contract_intake_receipt.freeze.attachment_manifest.status = 'authority_list_unavailable'
+  authorityListUnavailable.contract_intake_receipt.flags[0].code = 'FLG-ATTACHMENT-MANIFEST-INCOMPLETE'
+  authorityListUnavailable.contract_intake_receipt.flags[0].gate_reason_id = 'attachment-manifest-incomplete'
+  authorityListUnavailable.contract_intake_receipt.handoff.pending[0].id = 'PEND-001'
+  authorityListUnavailable.contract_intake_receipt.handoff.pending[0].from_flag = 'FLG-ATTACHMENT-MANIFEST-INCOMPLETE'
+  assert.equal(validate(authorityListUnavailable), true, JSON.stringify(validate.errors))
+
+  const r9Fixture = await fixture('r02-manifest-incomplete.receipt.yaml')
+  assert.equal(validate(r9Fixture), true, JSON.stringify(validate.errors))
+
+  const authorityListWithoutFlag = structuredClone(authorityListUnavailable)
+  authorityListWithoutFlag.contract_intake_receipt.flags = []
+  assert.equal(validate(authorityListWithoutFlag), false)
+
+  const authorityListWithoutPending = structuredClone(authorityListUnavailable)
+  authorityListWithoutPending.contract_intake_receipt.handoff.pending = []
+  assert.equal(validate(authorityListWithoutPending), false)
+
+  const noAttachmentsWithReference = structuredClone(receipt)
+  noAttachmentsWithReference.contract_intake_receipt.freeze.attachment_manifest.referenced = [{ no: 'A1', name: null, version: 'v1', doc_no: null, source }]
+  assert.equal(validate(noAttachmentsWithReference), false)
 
   const missingMirroredCaseId = structuredClone(receipt)
   delete missingMirroredCaseId.contract_intake_receipt.handoff.case_id
@@ -80,6 +144,19 @@ test('source wiring allows and requires only the readonly structural validation 
   assert.match(skill, /先前成功校验立即失效/)
   assert.match(skill, /逐字段精确镜像\s*比较/)
   assert.match(skill, /不能证明跨位置值相等/)
+})
+
+test('agent, Skill, and schema-valid fixture bind the same Intake release version', async () => {
+  const [agentText, skillText, receipt] = await Promise.all([
+    readFile(path.join(testsDir, '..', '..', '..', 'agent.json'), 'utf8'),
+    readFile(path.join(testsDir, '..', 'SKILL.md'), 'utf8'),
+    fixture(),
+  ])
+  const agent = JSON.parse(agentText)
+  const skillVersion = skillText.match(/^version: ([0-9]+\.[0-9]+\.[0-9]+)$/m)?.[1]
+
+  assert.equal(agent.version, skillVersion)
+  assert.equal(receipt.contract_intake_receipt.skill, `contract-intake-gate@${skillVersion}`)
 })
 
 test('receipt schema stays local Draft-07 without formats or external references', async () => {

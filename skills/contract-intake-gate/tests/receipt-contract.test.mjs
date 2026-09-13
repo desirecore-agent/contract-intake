@@ -150,6 +150,57 @@ test('referenced attachment omitted from formal manifest remains blocked', async
     code === 'BLK-ATTACHMENT-MISSING' && gate_reason_id === 'attachment-missing'))
 })
 
+test('missing formal list may continue only as the dedicated unique-delivery conditional state', async () => {
+  const receipt = await fixture('missing-formal-list-unique-delivery.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+  const manifest = receipt.freeze.attachment_manifest
+  const pending = receipt.handoff.pending.find(({ id }) => id === 'PEND-004')
+
+  assert.equal(receipt.verdict, 'conditional')
+  assert.equal(manifest.status, 'missing_formal_list')
+  assert.equal(manifest.frozen, false)
+  assert.equal(manifest.declared, null)
+  assert.equal(receipt.all_frozen, false)
+  assert.equal(manifest.referenced.length, 1)
+  assert.equal(manifest.delivered.length, 1)
+  assert.equal(manifest.referenced[0].name, null, 'body reference must not inherit the delivered attachment title')
+  assert.equal(manifest.delivered[0].name, '技术及验收标准')
+  assert.equal(manifest.referenced[0].no, manifest.delivered[0].no)
+  assert.equal(manifest.referenced[0].version, manifest.delivered[0].version)
+  assert.ok(receipt.flags.some(({ code, gate_reason_id }) =>
+    code === 'FLG-ATTACHMENT-MANIFEST-ABSENT' && gate_reason_id === 'attachment-manifest-absent'))
+  assert.deepEqual(
+    { from_flag: pending?.from_flag, must_escalate: pending?.must_escalate },
+    { from_flag: 'FLG-ATTACHMENT-MANIFEST-ABSENT', must_escalate: true },
+  )
+  assert.match(pending?.required_downstream_action ?? '', /not_covered/)
+})
+
+test('missing-formal-list branch rejects missing, ambiguous, and mismatched delivery', async () => {
+  for (const [name, code] of [
+    ['missing-formal-list-missing-delivery.receipt.yaml', 'BLK-ATTACHMENT-MISSING'],
+    ['missing-formal-list-ambiguous-delivery.receipt.yaml', 'BLK-ATTACHMENT-UNIDENTIFIED'],
+    ['missing-formal-list-version-conflict.receipt.yaml', 'BLK-ATTACHMENT-VERSION-CONFLICT'],
+  ]) {
+    const receipt = await fixture(name).then(({ contract_intake_receipt }) => contract_intake_receipt)
+    assert.equal(receipt.verdict, 'blocked', name)
+    assert.equal(receipt.handoff.to, null, name)
+    assert.ok(receipt.blocks.some(({ code: actual }) => actual === code), name)
+  }
+})
+
+test('formal-list missing identity stays blocked and no-attachment input remains the empty-set pass', async () => {
+  const incomplete = await fixture('formal-list-missing-identity.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+  assert.equal(incomplete.verdict, 'blocked')
+  assert.equal(incomplete.freeze.attachment_manifest.declared[0].name, null)
+  assert.ok(incomplete.blocks.some(({ code }) => code === 'BLK-ATTACHMENT-UNIDENTIFIED'))
+
+  const empty = await fixture('no-attachments.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+  assert.equal(empty.verdict, 'passed')
+  assert.deepEqual(empty.freeze.attachment_manifest.declared, [])
+  assert.deepEqual(empty.freeze.attachment_manifest.referenced, [])
+  assert.deepEqual(empty.freeze.attachment_manifest.delivered, [])
+})
+
 test('text-declared signature fields can pass S5 without claiming authenticity verification', async () => {
   const receipt = await fixture('text-declared-signature.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
   const execution = receipt.freeze.execution_status

@@ -2,7 +2,7 @@ contract_intake_receipt:
   intake_id: INTAKE-20260913-a1b2c3d4
   intake_at: '2026-09-13T10:00:00+08:00'
   executed_by: contract-intake
-  skill: contract-intake-gate@1.0.4
+  skill: contract-intake-gate@1.0.5
   verdict: passed
   verdict_label: 通过
   verdict_basis: S1-S8 已完成，无 BLK 或 FLG，四大冻结已建立。
@@ -25,7 +25,10 @@ contract_intake_receipt:
       parts: []
     attachment_manifest:
       frozen: true
+      status: no_attachments
       declared: []
+      referenced: []
+      delivered: []
     execution_status:
       frozen: true
       verification_status: not_performed

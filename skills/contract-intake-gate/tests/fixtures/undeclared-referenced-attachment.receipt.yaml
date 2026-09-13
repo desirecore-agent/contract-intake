@@ -1,6 +1,6 @@
 contract_intake_receipt:
   intake_id: INTAKE-UNDECLARED-REFERENCE
-  skill: contract-intake-gate@1.0.3
+  skill: contract-intake-gate@1.0.5
   verdict: blocked
   verdict_label: 拒绝
   freeze:

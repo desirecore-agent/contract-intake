@@ -60,6 +60,87 @@
         "frozen": { "type": "boolean", "description": "Whether this dimension was frozen under its applicable Skill rule." }
       }
     },
+    "attachmentRecord": {
+      "type": "object",
+      "description": "One observed S4 attachment record. Partial identity is retained only to describe a blocked finding.",
+      "required": ["no", "name", "version", "doc_no"],
+      "additionalProperties": true,
+      "properties": {
+        "no": { "$ref": "#/definitions/nullableString", "description": "Observed attachment identifier, or null when a blocked finding records its absence." },
+        "name": { "$ref": "#/definitions/nullableString", "description": "Observed attachment name, or null when a blocked finding records its absence." },
+        "version": { "$ref": "#/definitions/nullableString", "description": "Observed version identifier when stated." },
+        "doc_no": { "$ref": "#/definitions/nullableString", "description": "Observed document number when stated." },
+        "source": { "$ref": "#/definitions/sourceAnchor", "description": "Source-specific evidence anchor; it does not change this record into another source class." }
+      }
+    },
+    "identifiedAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/attachmentRecord" },
+        {
+          "type": "object",
+          "required": ["no", "name", "source"],
+          "properties": {
+            "no": { "$ref": "#/definitions/nonEmptyString" },
+            "name": { "$ref": "#/definitions/nonEmptyString" },
+            "source": { "$ref": "#/definitions/sourceAnchor", "description": "Required source anchor for a passed or conditional attachment identity." }
+          }
+        }
+      ],
+      "description": "A source-anchored attachment identity suitable for a passed or conditional receipt."
+    },
+    "sourceAnchoredAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/attachmentRecord" },
+        {
+          "type": "object",
+          "required": ["source"],
+          "properties": {
+            "source": { "$ref": "#/definitions/sourceAnchor", "description": "Required source anchor without inferring an absent identity field." }
+          }
+        }
+      ],
+      "description": "A source-anchored observation whose name, version, or document number may remain unknown."
+    },
+    "uniqueReferencedAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" },
+        {
+          "type": "object",
+          "required": ["no", "version"],
+          "properties": {
+            "no": { "$ref": "#/definitions/nonEmptyString" },
+            "version": { "$ref": "#/definitions/nonEmptyString" }
+          }
+        }
+      ],
+      "description": "A body reference with the explicit identifier and version required for the no-formal-list unique-match branch; its name is not inferred."
+    },
+    "uniqueDeliveredAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/identifiedAttachmentRecord" },
+        {
+          "type": "object",
+          "required": ["version"],
+          "properties": {
+            "version": { "$ref": "#/definitions/nonEmptyString" }
+          }
+        }
+      ],
+      "description": "A delivered attachment with an independently observed complete identity for the no-formal-list unique-match branch."
+    },
+    "attachmentManifest": {
+      "type": "object",
+      "description": "S4 keeps formal declarations, body references, and delivered attachment identities separate; validation cannot prove their cross-file matching.",
+      "required": ["frozen", "status", "declared", "referenced", "delivered"],
+      "additionalProperties": true,
+      "properties": {
+        "frozen": { "type": "boolean", "description": "Whether the formal attachment-manifest dimension is frozen under S4." },
+        "status": { "type": "string", "enum": ["formal_list", "no_attachments", "authority_list_unavailable", "missing_formal_list", "blocked"], "description": "S4 evidence state; it never lets delivered data impersonate a formal declaration." },
+        "declared": { "type": ["array", "null"], "items": { "$ref": "#/definitions/attachmentRecord" }, "description": "Formal-list declarations only, null when no complete formal list is available." },
+        "referenced": { "type": "array", "items": { "$ref": "#/definitions/attachmentRecord" }, "description": "Body references only." },
+        "delivered": { "type": "array", "items": { "$ref": "#/definitions/attachmentRecord" }, "description": "Actually delivered attachment identities only." }
+      }
+    },
     "party": {
       "type": "object",
       "description": "Per-party S5 signature-field evidence. It never asserts signature authenticity or authority.",
@@ -247,7 +328,7 @@
           "properties": {
             "master_version": { "$ref": "#/definitions/freeze", "description": "S2 master-version freeze." },
             "page_range": { "$ref": "#/definitions/freeze", "description": "S3 page-range freeze." },
-            "attachment_manifest": { "$ref": "#/definitions/freeze", "description": "S4 attachment-manifest freeze." },
+            "attachment_manifest": { "$ref": "#/definitions/attachmentManifest", "description": "S4 attachment-manifest evidence and freeze." },
             "execution_status": { "$ref": "#/definitions/executionStatus", "description": "S5 execution-status freeze." }
           }
         },
@@ -286,6 +367,26 @@
         {
           "if": { "type": "object", "properties": { "verdict": { "const": "conditional" } }, "required": ["verdict"] },
           "then": { "type": "object", "properties": { "verdict_label": { "const": "条件通过" }, "blocks": { "type": "array", "maxItems": 0 }, "flags": { "type": "array", "minItems": 1 }, "handoff": { "type": "object", "properties": { "to": { "const": "clause-extractor" } }, "required": ["to"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "passed" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "enum": ["formal_list", "no_attachments"] }, "declared": { "type": "array", "items": { "$ref": "#/definitions/identifiedAttachmentRecord" } }, "referenced": { "type": "array", "items": { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" } }, "delivered": { "type": "array", "items": { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" } } }, "required": ["status", "declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "conditional" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "declared": { "anyOf": [{ "type": "null" }, { "type": "array", "items": { "$ref": "#/definitions/identifiedAttachmentRecord" } }] }, "referenced": { "type": "array", "items": { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" } }, "delivered": { "type": "array", "items": { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" } } }, "required": ["declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "const": "no_attachments" } }, "required": ["status"] } }, "required": ["attachment_manifest"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "verdict": { "const": "passed" }, "all_frozen": { "const": true }, "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": true }, "declared": { "type": "array", "maxItems": 0 }, "referenced": { "type": "array", "maxItems": 0 }, "delivered": { "type": "array", "maxItems": 0 } }, "required": ["frozen", "declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "const": "missing_formal_list" } }, "required": ["status"] } }, "required": ["attachment_manifest"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "verdict": { "const": "conditional" }, "all_frozen": { "const": false }, "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": false }, "declared": { "type": "null" }, "referenced": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/uniqueReferencedAttachmentRecord" } }, "delivered": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/uniqueDeliveredAttachmentRecord" } } }, "required": ["frozen", "declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] }, "flags": { "type": "array", "contains": { "type": "object", "properties": { "code": { "const": "FLG-ATTACHMENT-MANIFEST-ABSENT" }, "gate_reason_id": { "const": "attachment-manifest-absent" } }, "required": ["code", "gate_reason_id"] } }, "handoff": { "type": "object", "properties": { "pending": { "type": "array", "contains": { "type": "object", "properties": { "id": { "const": "PEND-004" }, "from_flag": { "const": "FLG-ATTACHMENT-MANIFEST-ABSENT" }, "must_escalate": { "const": true } }, "required": ["id", "from_flag", "must_escalate"] } } }, "required": ["pending"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "const": "authority_list_unavailable" } }, "required": ["status"] } }, "required": ["attachment_manifest"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "verdict": { "const": "conditional" }, "all_frozen": { "const": false }, "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": false }, "declared": { "type": "null" } }, "required": ["frozen", "declared"] } }, "required": ["attachment_manifest"] }, "flags": { "type": "array", "contains": { "type": "object", "properties": { "code": { "const": "FLG-ATTACHMENT-MANIFEST-INCOMPLETE" }, "gate_reason_id": { "const": "attachment-manifest-incomplete" } }, "required": ["code", "gate_reason_id"] } }, "handoff": { "type": "object", "properties": { "pending": { "type": "array", "contains": { "type": "object", "properties": { "id": { "const": "PEND-001" }, "from_flag": { "const": "FLG-ATTACHMENT-MANIFEST-INCOMPLETE" }, "must_escalate": { "const": true } }, "required": ["id", "from_flag", "must_escalate"] } } }, "required": ["pending"] } } }
         },
         {
           "if": { "type": "object", "properties": { "verdict": { "const": "blocked" } }, "required": ["verdict"] },

@@ -1,0 +1,24 @@
+contract_intake_receipt:
+  intake_id: INTAKE-MANIFEST-ABSENT-MISSING
+  skill: contract-intake-gate@1.0.5
+  verdict: blocked
+  freeze:
+    attachment_manifest:
+      frozen: false
+      status: blocked
+      declared: null
+      referenced:
+        - no: A1
+          name: null
+          version: v1
+          doc_no: null
+      delivered: []
+  blocks:
+    - code: BLK-ATTACHMENT-MISSING
+      gate_reason_id: attachment-missing
+      severity: block
+      clause: '9'
+      evidence: {part: body, page: 2, quote: '附件A1-v1共1页为本合同组成部分'}
+      finding: 正文引用附件A1-v1但没有实际送达的唯一对应附件
+      action: 提交附件A1-v1后重新受理
+  handoff: {to: null}
