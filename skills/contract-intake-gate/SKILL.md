@@ -72,9 +72,9 @@ metadata:
    签章真实性或任何 Compose 保证，也不得把模型声称的 `valid`、工具 hash 或审计字段写入业务回执。
    现有回执协议没有 `yaml_unverified` 或验证状态字段；不得为了记录本次校验而向业务回执
    凭空增加字段。工具调用成功且返回 `valid: true` 后，才可把已校验的候选文件作为最终回执并按
-   既有 verdict 规则交接。`valid: false` 时只允许修正确定性工具的 `receipt_base` 一次，并重新调用该工具、`Read` 同一路径及以相同
-   路径、schema 路径和 `format: "yaml"` 重验。第二次 `valid: false`、任何路径/schema/parser/runtime
-   工具错误或未获结果，均在本轮对话如实报告 `HOLD`、不调用 `Delegate` / `SendMessage` 向下游交接，
+   既有 verdict 规则交接。`valid: false`、任何路径/schema/parser/runtime 工具错误或未获结果，均在本轮对话如实报告
+   `HOLD`、不调用 `Delegate` / `SendMessage` 向下游交接。输出槽是 create-only：不得为修复结构错误重用同一路径、
+   改写回执或另造替代回执。
    且不得把未验证或无效候选文件作为回执交付、不得伪造 `passed`、可信回执或 hash。验证成功后不得再修改该文件；任何后续修改都会使先前成功校验失效，交付前必须再次 `Read`
    并重新实际调用校验工具。此验证不改变 S1–S8、四大冻结、verdict、Human Gate
    与既有跨字段检查；这些业务检查仍必须在本 Agent 中完成。
@@ -897,7 +897,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 ### 落盘位置
 
 ```
-<有效工作目录>/contract-review-members/contract-intake/<intake_id>.receipt.yaml
+<有效工作目录>/<intake_id>.receipt.yaml
 ```
 
 `<有效工作目录>` 取当前会话的工作目录，**用 `Ls` 实际确认后使用绝对路径**，
@@ -905,9 +905,9 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 `intake_id`；合同中的原始 `contract_object_id` 仅保留在回执字段，绝不插入、清洗或转换为路径段。若 handoff 提供
 `canonical_artifact_root`，它及其全部子目录仅供读取，成员回执必须按完整路径段确认不在该保留根内；
 `lead_workspace` 只用于定位来源，不得据此自行切换到其他私有目录。若声明的
-`canonical_artifact_root` 恰覆盖上述成员命名空间，或规范化路径、既有目录链接使保留根关系无法确认，记录配置冲突并停止，不得写入保留根或改投其他位置。该成员命名空间只约定产物归属，不是额外安全沙箱；真实写入仍受平台路径授权约束，且不得调用 shell 做路径校验。旧回执**保留不覆盖**——规则更新后要靠它们做历史回放与差异对比。
+`canonical_artifact_root` 恰覆盖有效工作目录根，或规范化路径、既有目录链接使保留根关系无法确认，记录配置冲突并停止，不得写入保留根或改投其他位置。该根路径约定产物归属，不是额外安全沙箱；真实写入仍受平台路径授权约束，且不得调用 shell 做路径校验。旧回执**保留不覆盖**——规则更新后要靠它们做历史回放与差异对比。
 
-`Ls` 必须实际确认 effective cwd 与既有成员输出父目录；`output_path` 只能是该已存在受权目录内、由本次真实 `intake_id` 构成且尚不存在的唯一 `<intake_id>.receipt.yaml`。父目录缺失、路径已存在或平台返回的 output path 不等于请求的唯一目标时如实 HOLD，不得改投其他根。完成既有 scope 校验后，将该绝对 `receipt_path` 仅作为确定性工具的 `output_path` 参数；平台以受权 create-only 原子输出写入。不得调用 Bash/mkdir、普通 `Write` / `Edit`，也不得循环 `Ls` 猜测或创建目录。
+`Ls` 必须实际确认 effective cwd；`output_path` 只能是该已存在受权根内、由本次真实 `intake_id` 构成且尚不存在的唯一 `<intake_id>.receipt.yaml`。路径已存在、不是绝对路径、落在保留根内，或平台返回的 output path 不等于请求的唯一目标时如实 HOLD，不得改投其他根。完成既有 scope 校验后，将该绝对 `receipt_path` 仅作为确定性工具的 `output_path` 参数；平台以受权 create-only 原子输出写入。不得调用 Bash/mkdir、普通 `Write` / `Edit`，也不得循环 `Ls` 猜测或创建目录。
 
 ### 回执完整结构
 
