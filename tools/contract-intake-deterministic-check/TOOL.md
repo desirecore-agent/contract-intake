@@ -26,14 +26,12 @@ input_schema:
     - parts
   properties:
     contract_paths:
-      oneOf:
-        - type: string
-        - type: array
-          minItems: 1
-          maxItems: 16
-          items:
-            type: string
-      description: Authorized contract sources; snapshot-v1 removes paths before script execution.
+      type: array
+      minItems: 1
+      maxItems: 16
+      items:
+        type: string
+      description: Authorized contract source paths as an array; snapshot-v1 removes them before script execution.
     output_path:
       type: string
       description: Authorized create-only final receipt destination; snapshot-v1 removes it before script execution.
