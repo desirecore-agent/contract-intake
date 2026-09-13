@@ -53,6 +53,22 @@ test('release-owned final receipt schema accepts the defined receipt and rejects
   blankIdentityInPassedReceipt.contract_intake_receipt.freeze.attachment_manifest.declared = [{ no: 'A1', name: '', version: 'v1', doc_no: null, source }]
   assert.equal(validate(blankIdentityInPassedReceipt), false)
 
+  const formalDeclaredNullVersion = structuredClone(receipt)
+  formalDeclaredNullVersion.contract_intake_receipt.freeze.attachment_manifest.status = 'formal_list'
+  formalDeclaredNullVersion.contract_intake_receipt.freeze.attachment_manifest.declared = [{
+    no: 'A1', name: '技术及验收标准', version: null, doc_no: null, source,
+  }]
+  assert.equal(validate(formalDeclaredNullVersion), true, JSON.stringify(validate.errors))
+
+  const resolutionPollutesFormalDeclaration = structuredClone(formalDeclaredNullVersion)
+  resolutionPollutesFormalDeclaration.contract_intake_receipt.freeze.attachment_manifest.declared[0].version_resolution = {
+    resolved_version: 'v1',
+    basis: 'same_id_unique_explicit_version',
+    explicit_reference_sources: [source],
+    delivered_source: source,
+  }
+  assert.equal(validate(resolutionPollutesFormalDeclaration), false)
+
   const missingFormalList = structuredClone(receipt)
   const missingFormalReceipt = missingFormalList.contract_intake_receipt
   missingFormalReceipt.verdict = 'conditional'
@@ -74,6 +90,31 @@ test('release-owned final receipt schema accepts the defined receipt and rejects
     statement: 'The formal list is absent.', required_downstream_action: 'Keep overall attachment scope not_covered.',
   }]
   assert.equal(validate(missingFormalList), true, JSON.stringify(validate.errors))
+
+  const missingFormalResolvedShortReference = structuredClone(missingFormalList)
+  missingFormalResolvedShortReference.contract_intake_receipt.freeze.attachment_manifest.referenced.push({
+    no: 'A1', name: null, version: null, doc_no: null,
+    source: { part: 'body', page: 2, quote: '甲方按附件A1书面验收合格' },
+    version_resolution: {
+      resolved_version: 'v1',
+      basis: 'same_id_unique_explicit_version',
+      explicit_reference_sources: [source],
+      delivered_source: { part: 'attachment:附件A1', page: 1, quote: '附件编号：A1；附件版本：v1' },
+    },
+  })
+  assert.equal(validate(missingFormalResolvedShortReference), true, JSON.stringify(validate.errors))
+
+  const resolutionRewritesRawVersion = structuredClone(missingFormalResolvedShortReference)
+  resolutionRewritesRawVersion.contract_intake_receipt.freeze.attachment_manifest.referenced[1].version = 'v1'
+  assert.equal(validate(resolutionRewritesRawVersion), false)
+
+  const resolutionHasUnknownBasis = structuredClone(missingFormalResolvedShortReference)
+  resolutionHasUnknownBasis.contract_intake_receipt.freeze.attachment_manifest.referenced[1].version_resolution.basis = 'nearest-mention'
+  assert.equal(validate(resolutionHasUnknownBasis), false)
+
+  const resolutionHasExtraField = structuredClone(missingFormalResolvedShortReference)
+  resolutionHasExtraField.contract_intake_receipt.freeze.attachment_manifest.referenced[1].version_resolution.inferred_from_name = true
+  assert.equal(validate(resolutionHasExtraField), false)
 
   const missingFormalNullName = structuredClone(missingFormalList)
   missingFormalNullName.contract_intake_receipt.freeze.attachment_manifest.declared = [{ no: 'A1', name: null, version: 'v1', doc_no: null, source }]
@@ -125,6 +166,18 @@ test('release-owned final receipt schema accepts the defined receipt and rejects
   const wrongDraftPurpose = structuredClone(unsignedDraft)
   wrongDraftPurpose.contract_intake_receipt.handoff.review_purpose = 'draft_negotiation_assistance_with_execution_review'
   assert.equal(validate(wrongDraftPurpose), false)
+
+  const allFrozenButOneFalse = structuredClone(receipt)
+  allFrozenButOneFalse.contract_intake_receipt.freeze.page_range.frozen = false
+  assert.equal(validate(allFrozenButOneFalse), false)
+
+  const oneFalseButAllFrozen = structuredClone(missingFormalList)
+  oneFalseButAllFrozen.contract_intake_receipt.all_frozen = true
+  assert.equal(validate(oneFalseButAllFrozen), false)
+
+  const allTrueButAllFrozenFalse = structuredClone(receipt)
+  allTrueButAllFrozenFalse.contract_intake_receipt.all_frozen = false
+  assert.equal(validate(allTrueButAllFrozenFalse), false)
 })
 
 test('source wiring allows and requires only the readonly structural validation tool for this new check', async () => {
@@ -144,6 +197,9 @@ test('source wiring allows and requires only the readonly structural validation 
   assert.match(skill, /先前成功校验立即失效/)
   assert.match(skill, /逐字段精确镜像\s*比较/)
   assert.match(skill, /不能证明跨位置值相等/)
+  assert.match(skill, /含页码、附件、占位或金额的正则模式传 `pattern` 加 `is_regex: true`/)
+  assert.match(skill, /用 `MathCalc` 校验实际出现的页码集合是否等于 `\{1\.\.M\}`/)
+  assert.match(skill, /用 `MathCalc` 与小写数值做\*\*精确\*\*比较/)
 })
 
 test('agent, Skill, and schema-valid fixture bind the same Intake release version', async () => {

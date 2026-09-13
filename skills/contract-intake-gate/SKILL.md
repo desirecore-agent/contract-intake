@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.5
+version: 1.0.6
 type: procedural
 risk_level: low
 status: enabled
@@ -33,7 +33,7 @@ requires:
     - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.5
+  version: 1.0.6
   updated_at: '2026-09-13'
 ---
 
@@ -334,6 +334,15 @@ blocks:
 1. 每一个 `referenced` 附件都能与**唯一一个**实际 `delivered` 部件关联；
 2. 两侧可见的附件编号和版本标识逐字一致；附件正文自身有可回查的编号、名称和版本锚点；
 3. 每个关联同时保留正文引用锚点与已交付附件身份锚点，且没有额外未匹配的正文附件引用。
+
+**正文缩写不得改写原始事实。**`referenced[]` 的 `no`、`name`、`version`、`doc_no` 只记录该正文引用实际出现的字段；正文只写“附件 A1”时，`version` 必须是 `null`，不得因为别处出现 `A1-v1` 或已交付附件为 v1 而把原始记录改成 v1。为避免普通同编号缩写被误判为冲突，只有下列所有条件同时成立时，才可在该 raw `version: null` 记录附上闭合的 `version_resolution`：
+
+1. `no` 非空，且同一正文中的该 `no` 所有**显式**版本去重后恰为一个；
+2. `version_resolution.basis` 固定为 `same_id_unique_explicit_version`，`resolved_version` 逐字等于该唯一显式版本；
+3. `explicit_reference_sources[]` 逐条锚定该同编号的显式版本，`delivered_source` 锚定唯一一个编号及版本均相同、身份完整的已交付附件；
+4. 不存在第二个同编号已交付候选、第二个显式版本、或原文已写出的不同版本。
+
+这只是关联用的派生事实，绝不覆盖 raw `version: null`、绝不把已交付标题写成正文标题，也不能从名称、相邻条款、模型记忆或自然语言相似性推断。无显式版本锚、多个显式版本、多个已交付候选或任一冲突时不得解析，按既有 `BLK-ATTACHMENT-UNIDENTIFIED` 或 `BLK-ATTACHMENT-VERSION-CONFLICT` 阻断；正式清单场景仍以 `declared` 自身的观察字段为准，不能用 delivered 冒充 declared。
 
 此时写 `declared: null`、`attachment_manifest.frozen: false`、`all_frozen: false`、
 `FLG-ATTACHMENT-MANIFEST-ABSENT`（`gate_reason_id: attachment-manifest-absent`）和唯一
@@ -843,7 +852,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 **不是** `conditional`。这是本技能最容易出的门禁错判：
 把"附件没写版本号""附件正文没随材料来"这类客观范围事实当成缺陷，会让一大批正常合同被降级。
 
-四大冻结任一 `frozen: false` 但又没有对应的 `BLK-*`，也没有**明确解释该冻结缺口的
+`all_frozen` 是四项 typed `freeze.master_version.frozen`、`freeze.page_range.frozen`、`freeze.attachment_manifest.frozen`、`freeze.execution_status.frozen` 的逻辑 AND，必须逐字段据实写入；`verdict_basis` 只是解释，不是冻结状态来源，绝不得笼统声称“四大冻结全部成立”而任一 typed 字段为 `false`。四大冻结任一 `frozen: false` 但又没有对应的 `BLK-*`，也没有**明确解释该冻结缺口的
 `FLG-*`** 时，说明检查逻辑有漏洞——此时按 `conditional` 处理并补记
 `FLG-FREEZE-INCOMPLETE`，**不得**按 `passed` 处理。R9 已由
 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` 明确解释附件清单冻结缺口；不得再附加

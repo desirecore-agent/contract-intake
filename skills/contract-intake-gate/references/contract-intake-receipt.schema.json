@@ -62,7 +62,7 @@
     },
     "attachmentRecord": {
       "type": "object",
-      "description": "One observed S4 attachment record. Partial identity is retained only to describe a blocked finding.",
+      "description": "One observed S4 attachment record. no/name/version/doc_no are source observations; a resolution never rewrites an absent observed version.",
       "required": ["no", "name", "version", "doc_no"],
       "additionalProperties": true,
       "properties": {
@@ -70,8 +70,34 @@
         "name": { "$ref": "#/definitions/nullableString", "description": "Observed attachment name, or null when a blocked finding records its absence." },
         "version": { "$ref": "#/definitions/nullableString", "description": "Observed version identifier when stated." },
         "doc_no": { "$ref": "#/definitions/nullableString", "description": "Observed document number when stated." },
-        "source": { "$ref": "#/definitions/sourceAnchor", "description": "Source-specific evidence anchor; it does not change this record into another source class." }
+        "source": { "$ref": "#/definitions/sourceAnchor", "description": "Source-specific evidence anchor; it does not change this record into another source class." },
+        "version_resolution": { "$ref": "#/definitions/versionResolution", "description": "A bounded derived identity for an observed body reference whose version is absent; it never changes version from null." }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "version_resolution": {} }, "required": ["version_resolution"] },
+          "then": { "properties": { "no": { "$ref": "#/definitions/nonEmptyString" }, "version": { "const": null } }, "required": ["no", "version"] }
+        }
+      ]
+    },
+    "versionResolution": {
+      "type": "object",
+      "description": "A narrow same-identifier resolution for a body reference with no observed version. The Skill verifies uniqueness across records; this schema validates only the closed evidence shape.",
+      "required": ["resolved_version", "basis", "explicit_reference_sources", "delivered_source"],
+      "additionalProperties": false,
+      "properties": {
+        "resolved_version": { "$ref": "#/definitions/nonEmptyString", "description": "The one version observed explicitly for this attachment identifier elsewhere in the body." },
+        "basis": { "const": "same_id_unique_explicit_version", "description": "The only allowed derivation basis; no natural-language or name-based inference is allowed." },
+        "explicit_reference_sources": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/definitions/sourceAnchor" }, "description": "Body anchors that explicitly state the resolved version for the same identifier." },
+        "delivered_source": { "$ref": "#/definitions/sourceAnchor", "description": "Anchor of the one delivered attachment with the same identifier and resolved version." }
       }
+    },
+    "formalDeclaredAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/attachmentRecord" },
+        { "not": { "type": "object", "properties": { "version_resolution": {} }, "required": ["version_resolution"] } }
+      ],
+      "description": "A formal-list observation. It may retain an observed null version, but never carries a body-reference version resolution."
     },
     "identifiedAttachmentRecord": {
       "allOf": [
@@ -115,6 +141,21 @@
       ],
       "description": "A body reference with the explicit identifier and version required for the no-formal-list unique-match branch; its name is not inferred."
     },
+    "resolvedReferencedAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" },
+        {
+          "type": "object",
+          "required": ["no", "version", "version_resolution"],
+          "properties": {
+            "no": { "$ref": "#/definitions/nonEmptyString" },
+            "version": { "const": null },
+            "version_resolution": { "$ref": "#/definitions/versionResolution" }
+          }
+        }
+      ],
+      "description": "A raw body reference without a stated version, accompanied by a typed same-identifier resolution. It remains raw version:null in the receipt."
+    },
     "uniqueDeliveredAttachmentRecord": {
       "allOf": [
         { "$ref": "#/definitions/identifiedAttachmentRecord" },
@@ -136,7 +177,7 @@
       "properties": {
         "frozen": { "type": "boolean", "description": "Whether the formal attachment-manifest dimension is frozen under S4." },
         "status": { "type": "string", "enum": ["formal_list", "no_attachments", "authority_list_unavailable", "missing_formal_list", "blocked"], "description": "S4 evidence state; it never lets delivered data impersonate a formal declaration." },
-        "declared": { "type": ["array", "null"], "items": { "$ref": "#/definitions/attachmentRecord" }, "description": "Formal-list declarations only, null when no complete formal list is available." },
+        "declared": { "type": ["array", "null"], "items": { "$ref": "#/definitions/formalDeclaredAttachmentRecord" }, "description": "Formal-list declarations only, null when no complete formal list is available. They never carry a body-reference resolution." },
         "referenced": { "type": "array", "items": { "$ref": "#/definitions/attachmentRecord" }, "description": "Body references only." },
         "delivered": { "type": "array", "items": { "$ref": "#/definitions/attachmentRecord" }, "description": "Actually delivered attachment identities only." }
       }
@@ -361,6 +402,26 @@
       },
       "allOf": [
         {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "master_version": { "type": "object", "properties": { "frozen": { "const": false } }, "required": ["frozen"] } }, "required": ["master_version"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": false } }, "required": ["all_frozen"] }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "page_range": { "type": "object", "properties": { "frozen": { "const": false } }, "required": ["frozen"] } }, "required": ["page_range"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": false } }, "required": ["all_frozen"] }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": false } }, "required": ["frozen"] } }, "required": ["attachment_manifest"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": false } }, "required": ["all_frozen"] }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "execution_status": { "type": "object", "properties": { "frozen": { "const": false } }, "required": ["frozen"] } }, "required": ["execution_status"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": false } }, "required": ["all_frozen"] }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "master_version": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "page_range": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "execution_status": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] } }, "required": ["master_version", "page_range", "attachment_manifest", "execution_status"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": true } }, "required": ["all_frozen"] }
+        },
+        {
           "if": { "type": "object", "properties": { "verdict": { "const": "passed" } }, "required": ["verdict"] },
           "then": { "type": "object", "properties": { "verdict_label": { "const": "通过" }, "all_frozen": { "const": true }, "freeze": { "type": "object", "properties": { "master_version": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "page_range": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "execution_status": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] } }, "required": ["master_version", "page_range", "attachment_manifest", "execution_status"] }, "blocks": { "type": "array", "maxItems": 0 }, "flags": { "type": "array", "maxItems": 0 }, "handoff": { "type": "object", "properties": { "to": { "const": "clause-extractor" } }, "required": ["to"] } } }
         },
@@ -382,7 +443,7 @@
         },
         {
           "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "const": "missing_formal_list" } }, "required": ["status"] } }, "required": ["attachment_manifest"] } }, "required": ["freeze"] },
-          "then": { "type": "object", "properties": { "verdict": { "const": "conditional" }, "all_frozen": { "const": false }, "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": false }, "declared": { "type": "null" }, "referenced": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/uniqueReferencedAttachmentRecord" } }, "delivered": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/uniqueDeliveredAttachmentRecord" } } }, "required": ["frozen", "declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] }, "flags": { "type": "array", "contains": { "type": "object", "properties": { "code": { "const": "FLG-ATTACHMENT-MANIFEST-ABSENT" }, "gate_reason_id": { "const": "attachment-manifest-absent" } }, "required": ["code", "gate_reason_id"] } }, "handoff": { "type": "object", "properties": { "pending": { "type": "array", "contains": { "type": "object", "properties": { "id": { "const": "PEND-004" }, "from_flag": { "const": "FLG-ATTACHMENT-MANIFEST-ABSENT" }, "must_escalate": { "const": true } }, "required": ["id", "from_flag", "must_escalate"] } } }, "required": ["pending"] } } }
+          "then": { "type": "object", "properties": { "verdict": { "const": "conditional" }, "all_frozen": { "const": false }, "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": false }, "declared": { "type": "null" }, "referenced": { "type": "array", "minItems": 1, "items": { "oneOf": [{ "$ref": "#/definitions/uniqueReferencedAttachmentRecord" }, { "$ref": "#/definitions/resolvedReferencedAttachmentRecord" }] } }, "delivered": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/uniqueDeliveredAttachmentRecord" } } }, "required": ["frozen", "declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] }, "flags": { "type": "array", "contains": { "type": "object", "properties": { "code": { "const": "FLG-ATTACHMENT-MANIFEST-ABSENT" }, "gate_reason_id": { "const": "attachment-manifest-absent" } }, "required": ["code", "gate_reason_id"] } }, "handoff": { "type": "object", "properties": { "pending": { "type": "array", "contains": { "type": "object", "properties": { "id": { "const": "PEND-004" }, "from_flag": { "const": "FLG-ATTACHMENT-MANIFEST-ABSENT" }, "must_escalate": { "const": true } }, "required": ["id", "from_flag", "must_escalate"] } } }, "required": ["pending"] } } }
         },
         {
           "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "const": "authority_list_unavailable" } }, "required": ["status"] } }, "required": ["attachment_manifest"] } }, "required": ["freeze"] },

@@ -77,6 +77,32 @@ function assertSignatureEvidenceContract(receipt) {
   }
 }
 
+function assertSameIdUniqueVersionResolution(receipt) {
+  const manifest = receipt.freeze.attachment_manifest
+  const references = manifest.referenced
+  const delivered = manifest.delivered
+
+  for (const reference of references.filter((item) => item.version_resolution)) {
+    const resolution = reference.version_resolution
+    assert.equal(reference.version, null, 'a resolution must not rewrite the raw observed version')
+    assert.equal(resolution.basis, 'same_id_unique_explicit_version')
+    assert.ok(resolution.explicit_reference_sources.length > 0)
+    const explicitVersions = new Set(references
+      .filter((item) => item.no === reference.no && typeof item.version === 'string')
+      .map((item) => item.version))
+    assert.deepEqual([...explicitVersions], [resolution.resolved_version], 'the same identifier needs one explicit version')
+    const explicitSources = references
+      .filter((item) => item.no === reference.no && item.version === resolution.resolved_version)
+      .map((item) => item.source)
+    for (const source of resolution.explicit_reference_sources) {
+      assert.ok(explicitSources.some((candidate) => JSON.stringify(candidate) === JSON.stringify(source)), 'each explicit-version anchor must identify a same-id explicit body reference')
+    }
+    const deliveredMatches = delivered.filter((item) => item.no === reference.no && item.version === resolution.resolved_version)
+    assert.equal(deliveredMatches.length, 1, 'the same identifier needs one delivered version match')
+    assert.deepEqual(resolution.delivered_source, deliveredMatches[0].source)
+  }
+}
+
 test('R02-like incomplete manifest is conditional, escalated, and handed off', async () => {
   const receipt = await fixture('r02-manifest-incomplete.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
   const { handoff } = receipt
@@ -186,6 +212,48 @@ test('missing-formal-list branch rejects missing, ambiguous, and mismatched deli
     assert.equal(receipt.handoff.to, null, name)
     assert.ok(receipt.blocks.some(({ code: actual }) => actual === code), name)
   }
+})
+
+test('missing-formal-list resolves an ordinary same-id short reference without rewriting raw version evidence', async () => {
+  const receipt = await fixture('missing-formal-list-resolved-short-reference.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+  const manifest = receipt.freeze.attachment_manifest
+  const shortReference = manifest.referenced[1]
+
+  assert.equal(receipt.verdict, 'conditional')
+  assert.equal(manifest.frozen, false)
+  assert.equal(receipt.all_frozen, false)
+  assert.equal(shortReference.version, null)
+  assert.equal(shortReference.version_resolution.resolved_version, 'v1')
+  assert.equal(shortReference.version_resolution.basis, 'same_id_unique_explicit_version')
+  assertSameIdUniqueVersionResolution(receipt)
+  assert.ok(receipt.flags.some(({ code }) => code === 'FLG-ATTACHMENT-MANIFEST-ABSENT'))
+  assert.ok(receipt.handoff.pending.some(({ id, must_escalate }) => id === 'PEND-004' && must_escalate))
+})
+
+test('same-id short-reference resolution requires one explicit body version and one delivered identity', async () => {
+  const receipt = await fixture('missing-formal-list-resolved-short-reference.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+
+  const noExplicitVersion = structuredClone(receipt)
+  noExplicitVersion.freeze.attachment_manifest.referenced[0].version = null
+  assert.throws(() => assertSameIdUniqueVersionResolution(noExplicitVersion), /one explicit version/)
+
+  const twoDeliveredMatches = structuredClone(receipt)
+  twoDeliveredMatches.freeze.attachment_manifest.delivered.push(structuredClone(twoDeliveredMatches.freeze.attachment_manifest.delivered[0]))
+  assert.throws(() => assertSameIdUniqueVersionResolution(twoDeliveredMatches), /one delivered version match/)
+
+  const unanchoredExplicitVersion = structuredClone(receipt)
+  unanchoredExplicitVersion.freeze.attachment_manifest.referenced[1].version_resolution.explicit_reference_sources = [{ part: 'body', page: 99, quote: 'unobserved A1-v1' }]
+  assert.throws(() => assertSameIdUniqueVersionResolution(unanchoredExplicitVersion), /each explicit-version anchor/)
+})
+
+test('missing-formal-list leaves a short reference unresolved when the same identifier has multiple explicit versions', async () => {
+  const receipt = await fixture('missing-formal-list-short-reference-ambiguous.receipt.yaml').then(({ contract_intake_receipt }) => contract_intake_receipt)
+  const shortReference = receipt.freeze.attachment_manifest.referenced[2]
+
+  assert.equal(receipt.verdict, 'blocked')
+  assert.equal(shortReference.version, null)
+  assert.equal(shortReference.version_resolution, undefined)
+  assert.ok(receipt.blocks.some(({ code }) => code === 'BLK-ATTACHMENT-VERSION-CONFLICT'))
 })
 
 test('formal-list missing identity stays blocked and no-attachment input remains the empty-set pass', async () => {

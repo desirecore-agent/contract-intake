@@ -1,6 +1,6 @@
 contract_intake_receipt:
   intake_id: INTAKE-R8-VERSION-CHANGE
-  skill: contract-intake-gate@1.0.5
+  skill: contract-intake-gate@1.0.6
   verdict: conditional
   verdict_label: 条件通过
   flags:

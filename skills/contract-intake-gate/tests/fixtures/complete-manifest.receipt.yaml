@@ -1,6 +1,6 @@
 contract_intake_receipt:
   intake_id: INTAKE-COMPLETE-MANIFEST
-  skill: contract-intake-gate@1.0.5
+  skill: contract-intake-gate@1.0.6
   verdict: passed
   verdict_label: 通过
   freeze:

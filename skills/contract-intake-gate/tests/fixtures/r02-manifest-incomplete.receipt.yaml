@@ -2,7 +2,7 @@ contract_intake_receipt:
   intake_id: INTAKE-20260913-a02c0de1
   intake_at: '2026-09-13T10:00:00+08:00'
   executed_by: contract-intake
-  skill: contract-intake-gate@1.0.5
+  skill: contract-intake-gate@1.0.6
   verdict: conditional
   verdict_label: 条件通过
   verdict_basis: 权威附件清单未随材料送达，附件范围只能条件通过。
