@@ -81,6 +81,7 @@ contract_intake_receipt:
   handoff:
     to: clause-extractor
     from: contract-intake
+    case_id: C01-DEMO-2026-001
     intake_id: INTAKE-20260913-a1b2c3d4
     receipt_path: C:/workspace/contract-review-members/contract-intake/INTAKE-20260913-a1b2c3d4.receipt.yaml
     object:

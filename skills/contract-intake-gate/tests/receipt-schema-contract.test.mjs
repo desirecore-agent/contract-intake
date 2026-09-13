@@ -42,6 +42,10 @@ test('release-owned final receipt schema accepts the defined receipt and rejects
   falseFreezeInPassedReceipt.contract_intake_receipt.freeze.page_range.frozen = false
   assert.equal(validate(falseFreezeInPassedReceipt), false)
 
+  const missingMirroredCaseId = structuredClone(receipt)
+  delete missingMirroredCaseId.contract_intake_receipt.handoff.case_id
+  assert.equal(validate(missingMirroredCaseId), false)
+
   const unsignedDraft = structuredClone(receipt)
   const execution = unsignedDraft.contract_intake_receipt.freeze.execution_status
   execution.signature_status = 'unsigned_draft'

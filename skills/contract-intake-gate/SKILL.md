@@ -127,7 +127,7 @@ metadata:
    c. 批量成功仅在返回 `files[].path` 逐项对应完整 `submitted_file_paths` 集合、`files[]` 完整且 `aggregate.file_count = N` 时成立；只用工具返回的 `absolute_path` 和 `digest` 登记既有规范绝对路径字段与摘要，不把 `absolute_path` 声称为自动 realpath 身份，才可记录完整集合 aggregate。只有 `FileDigest` 明确返回参数形态错误时，才可保持同一原集合和同一 `paths_json` 形状纠正一次；绝不拆成多个单文件调用、缩减集合或以单文件 aggregate 冒充批量。
     d. 除 c 的明确参数形态错误外，权限拒绝、超限、文件消失、入口不可用、真实执行失败、返回缺项或 aggregate 数不符，都在既有 S1 finding/`unknown` failure reason 中明确 `batch_unverified` 和真实工具原因后停止 S1 摘要步骤；不得跨文件把冻结记为 `true`、编造 SHA-256 或以此为依据通过。本 Agent 的工具权限不含 `Bash`、`PowerShell` 或 `TerminalControl`，不得用 shell 诊断、重试或替代 `FileDigest`。
 
-**Lead 双集合摘要契约。**只有 `Delegate` 的显式 `handoff.case_id` 可作为本案 case_id；不得从 `intentId`、Work Context、旧回执或成员文本推导。Lead 的 O1 交接必须含 `submitted_file_paths`、`object.documents` 和 `input_inventory`；S1 的完整批量 aggregate 必须逐字等于 `input_inventory.submission_inventory_manifest_digest`；`object.documents` 只能是 Lead 已声明的 current 合同集，且 `object.manifest_digest` 必须逐字等于 `input_inventory.current_contract_manifest_digest`。`submission_inventory_manifest_digest` 与 `current_contract_manifest_digest` 都是既有内容摘要字符串：任一不可得写 `unknown` 并保留各自真实 `*_unavailable_reason`；不得互换、从一个推导另一个，或将当前集合缩成单文件。缺失、值不等、S1 aggregate 不等、case_id 不在显式 handoff，或 object documents 含非 current 集合时，写 `O1_MANIFEST_CONTRACT_INVALID` 并 HOLD。S4 `attachment_manifest_digest` 仅是四字段对账表摘要，必须与两个 FileDigest 集合摘要分开记录、不得作为其别名或比较依据。
+**Lead 双集合摘要契约。**只有本次 `Delegate.context` 字符串中完整 YAML 的显式 `handoff.case_id` 可作为本案 case_id；`task` 只是执行指令，不承载或证明 case 身份。不得从 `task`、`intentId`、Work Context、旧回执或成员文本推导。Lead 的 O1 交接必须含 `submitted_file_paths`、`object.documents` 和 `input_inventory`；S1 的完整批量 aggregate 必须逐字等于 `input_inventory.submission_inventory_manifest_digest`；`object.documents` 只能是 Lead 已声明的 current 合同集，且 `object.manifest_digest` 必须逐字等于 `input_inventory.current_contract_manifest_digest`。`submission_inventory_manifest_digest` 与 `current_contract_manifest_digest` 都是既有内容摘要字符串：任一不可得写 `unknown` 并保留各自真实 `*_unavailable_reason`；不得互换、从一个推导另一个，或将当前集合缩成单文件。`context` 缺失、不能形成完整 handoff YAML、必需字段缺失、值不等、S1 aggregate 不等，或 object documents 含非 current 集合时，写 `O1_MANIFEST_CONTRACT_INVALID` 并 HOLD。S4 `attachment_manifest_digest` 仅是四字段对账表摘要，必须与两个 FileDigest 集合摘要分开记录、不得作为其别名或比较依据。
 2. 把内容切分为**文档部件（part）**：
    - `body` —— 合同正文
    - `attachment:<编号>` —— 随材料送达的附件正文（如 `attachment:附件二`、`attachment:Exhibit B`）
@@ -962,6 +962,7 @@ contract_intake_receipt:
 handoff:
   to: clause-extractor                  # verdict 为 blocked 时必须为 null
   from: contract-intake
+  case_id: <已验证入站 Delegate.context.handoff.case_id；逐字镜像，不得从 task/intentId/Work Context 推断>
   intake_id: INTAKE-20260331-7f3a2c9b
   receipt_path: /abs/path/.../INTAKE-20260331-7f3a2c9b.receipt.yaml
   # 仅已知未签署草稿的辅助审查例外填写以下两项；其他分支省略，绝不虚构草稿例外。
@@ -1022,8 +1023,10 @@ handoff:
     - 任何未经 evidence 锚定的判断
 ```
 
-**交接方式**：用 `Delegate`（`mode: sync`）把上面的 YAML 块作为 `context` 传给
-`handoff.to`。引用的所有文件必须写**绝对路径**——下游 Agent 的工作目录与你不同。
+**返回方式**：Intake 只向同步调用它的 Lead 返回已验证的最终回执和上面的 `handoff` 数据，
+不得自行 `Delegate` 或 `SendMessage` 给 `clause-extractor` 或任何下游。`handoff.to` 只是 Lead
+在既有 RC 与账本门禁完成后唯一 O2 派发所用的目标数据；Lead 的 RC、账本和派发责任不在 Intake
+转移。引用的所有文件必须写**绝对路径**——下游 Agent 的工作目录与你不同。
 
 ---
 

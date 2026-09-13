@@ -171,12 +171,13 @@
     },
     "handoff": {
       "type": "object",
-      "description": "Defined downstream handoff fields. The agent's verdict rules determine whether it may be sent.",
-      "required": ["to", "from", "intake_id", "receipt_path", "object", "input_inventory", "confirmed", "pending", "scope", "do_not_pass"],
+      "description": "Verified handoff data returned to the synchronous Lead; Lead alone applies its receipt gates, ledger, and O2 dispatch.",
+      "required": ["to", "from", "case_id", "intake_id", "receipt_path", "object", "input_inventory", "confirmed", "pending", "scope", "do_not_pass"],
       "additionalProperties": false,
       "properties": {
         "to": { "type": ["string", "null"], "enum": ["clause-extractor", null], "description": "Downstream target, or null for a blocked receipt." },
         "from": { "const": "contract-intake", "description": "The source agent." },
+        "case_id": { "$ref": "#/definitions/nonEmptyString", "description": "Exact mirror of the validated inbound Delegate.context handoff.case_id; schema validation cannot prove the cross-message equality." },
         "intake_id": { "type": "string", "pattern": "^INTAKE-[0-9]{8}-[0-9a-f]{8}$", "description": "The generated intake identifier mirrored from the receipt." },
         "receipt_path": { "$ref": "#/definitions/nonEmptyString", "description": "Absolute path to this final receipt." },
         "object": { "$ref": "#/definitions/objectIdentity", "description": "Reviewed contract identity." },
@@ -275,7 +276,7 @@
         "alignment_advice": { "type": "array", "items": { "type": "object" }, "description": "S8 alignment advice entries." },
         "human_gate": { "type": "array", "items": { "$ref": "#/definitions/humanGate" }, "description": "Human actions not replaced by the intake agent." },
         "remediation": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" }, "description": "Imperative remediation list, required especially for blocked results." },
-        "handoff": { "$ref": "#/definitions/handoff", "description": "Defined downstream handoff payload." }
+        "handoff": { "$ref": "#/definitions/handoff", "description": "Verified handoff data returned to the synchronous Lead." }
       },
       "allOf": [
         {
