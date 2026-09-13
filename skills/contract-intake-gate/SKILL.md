@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.6
+version: 1.0.7
 type: procedural
 risk_level: low
 status: enabled
@@ -33,7 +33,7 @@ requires:
     - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.6
+  version: 1.0.7
   updated_at: '2026-09-13'
 ---
 
@@ -43,6 +43,18 @@ metadata:
 
 收到任何待审查的合同材料时**第一个**执行本技能。下游的条款抽取、风险识别、法域合规、
 复核出报告四个环节，只有在本技能给出 `通过` 或 `条件通过` 后才允许启动。
+
+## 本轮工具执行清单（先执行，后判定）
+
+1. 先按 S1–S8 顺序执行本技能要求的实际读取、搜索和摘要工具；`Grep` 的正则模式必须传
+   `is_regex: true`，逐字 quote 必须传 `is_regex: false`，不得混用。`FileDigest` 的单文件
+   `paths` 与多文件 `paths_json` 形状严格按 S1 使用，不得互换。
+2. S3 对每个页码组必须实际调用 `MathCalc` 校验完整集合，S7 对每组成对金额必须实际调用
+   `MathCalc` 比较数值。缺少调用、调用失败或没有实际返回值时，该步不得写 `pass`；立即如实
+   `HOLD`，不得写最终 verdict、不得交接，也不得用模型自述的 `called: true` 或新增回执字段补证。
+3. 完成全部业务检查后，严格串行执行：先 `Read` 本地回执 Schema，再 `Write` 候选回执，随后
+   `Read` 刚写入的同一路径，最后才调用 `StructuredFileValidate`。任一步失败按下文规则 HOLD；
+   禁止并行、跳过回读或用结构校验代替 S1–S8 的真实执行。
 
 ## 不可协商的前提
 
@@ -241,7 +253,12 @@ freeze:
 2. **按部件分组**。正文一段序列、每个附件各一段序列。
 3. 对每一组：
    - 取声明总页数 `M`（组内 `M` 不唯一时 → `BLK-PAGE-TOTAL-CONFLICT`）
-   - 用 `MathCalc` 校验实际出现的页码集合是否等于 `{1..M}`
+   - 用 `MathCalc` 校验实际出现的页码集合是否等于 `{1..M}`。先依据 `Grep` 的逐条结果，按
+     `1..M` 构造长度恰为 `M` 的 `present_once_flags`：某页恰好出现一次为 `1`，缺失或重复为 `0`；
+     另记录范围外实际页号的 `unexpected_page_count`，再实际调用
+     `MathCalc({expression: "sum(present_once_flags) == declared_total and unexpected_page_count == 0", scope: {present_once_flags: [<按页序的 0/1>], declared_total: "<M>", unexpected_page_count: "<范围外页号数>"}, mode: "bignumber", precision: 64, format: "auto"})`。
+     只有工具成功返回精确 `true`，且逐条 Grep 结果没有 M 冲突时，才可通过本组；
+     不得心算、不得把参数或预期值当成工具结果。
    - 缺号 → 记录缺失页列表；重号 → 记录重复页列表
 
 > ⚠️ 最容易误报的地方：一个文件里可能同时存在"正文 1–7 / 共 7 页"和"附件 1–2 / 共 2 页"两段序列。
@@ -723,7 +740,10 @@ blocks:
    - `<小写>元（大写：<大写>）`
    - `RMB <小写> (SAY <大写> ONLY)`
 2. 把中文大写逐字转成数值（`壹贰叁肆伍陆柒捌玖` / `拾佰仟萬万亿` / `零` / `角分`），
-   用 `MathCalc` 与小写数值做**精确**比较。
+   用 `MathCalc` 与小写数值做**精确**比较：对每一对金额，把原文大写金额规范化为精确十进制
+   字符串后，实际调用
+   `MathCalc({expression: "uppercase_value - lowercase_value", scope: {uppercase_value: "<大写规范值>", lowercase_value: "<小写原值>"}, mode: "bignumber", precision: 64, format: "auto"})`。
+   只有工具成功返回精确 `0` 才可判相等；调用缺失、失败或无返回值时不得自行比较或把 S7 写成 `pass`。
 3. 只在**成对**出现时比较。单独出现的大写金额或小写金额不参与本检查。
 
 **命中什么算失败**

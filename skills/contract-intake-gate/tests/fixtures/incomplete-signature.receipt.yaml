@@ -1,6 +1,6 @@
 contract_intake_receipt:
   intake_id: INTAKE-INCOMPLETE-SIGNATURE
-  skill: contract-intake-gate@1.0.6
+  skill: contract-intake-gate@1.0.7
   verdict: blocked
   verdict_label: 拒绝
   freeze:

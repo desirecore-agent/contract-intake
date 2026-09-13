@@ -199,7 +199,13 @@ test('source wiring allows and requires only the readonly structural validation 
   assert.match(skill, /不能证明跨位置值相等/)
   assert.match(skill, /含页码、附件、占位或金额的正则模式传 `pattern` 加 `is_regex: true`/)
   assert.match(skill, /用 `MathCalc` 校验实际出现的页码集合是否等于 `\{1\.\.M\}`/)
+  assert.match(skill, /MathCalc\(\{expression: "sum\(present_once_flags\) == declared_total and unexpected_page_count == 0".*mode: "bignumber", precision: 64, format: "auto"\}\)/s)
   assert.match(skill, /用 `MathCalc` 与小写数值做\*\*精确\*\*比较/)
+  assert.match(skill, /MathCalc\(\{expression: "uppercase_value - lowercase_value".*mode: "bignumber", precision: 64, format: "auto"\}\)/s)
+  assert.match(skill, /缺少调用、调用失败或没有实际返回值时，该步不得写 `pass`/)
+  assert.match(skill, /不得用模型自述的 `called: true` 或新增回执字段补证/)
+  assert.match(skill, /严格串行执行：先 `Read` 本地回执 Schema，再 `Write` 候选回执，随后\s+`Read` 刚写入的同一路径，最后才调用 `StructuredFileValidate`/)
+  assert.match(skill, /禁止并行、跳过回读或用结构校验代替 S1–S8 的真实执行/)
 })
 
 test('agent, Skill, and schema-valid fixture bind the same Intake release version', async () => {

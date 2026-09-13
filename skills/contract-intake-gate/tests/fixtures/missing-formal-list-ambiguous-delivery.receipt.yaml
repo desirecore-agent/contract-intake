@@ -1,6 +1,6 @@
 contract_intake_receipt:
   intake_id: INTAKE-MANIFEST-ABSENT-AMBIGUOUS
-  skill: contract-intake-gate@1.0.6
+  skill: contract-intake-gate@1.0.7
   verdict: blocked
   freeze:
     attachment_manifest:
