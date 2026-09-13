@@ -1,0 +1,18 @@
+contract_intake_receipt:
+  intake_id: INTAKE-NO-SIGNATURE-UNKNOWN
+  verdict: blocked
+  verdict_label: 拒绝
+  freeze:
+    execution_status:
+      frozen: false
+      signature_status: unknown
+      verification_status: not_performed
+      parties: []
+  checks:
+    - id: S5
+      status: block
+      finding: 无落款区且材料未明确未签署状态
+  blocks:
+    - code: BLK-SIGNATURE-BLOCK-ABSENT
+  handoff:
+    to: null

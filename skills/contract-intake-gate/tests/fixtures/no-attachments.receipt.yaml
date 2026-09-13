@@ -1,0 +1,15 @@
+contract_intake_receipt:
+  intake_id: INTAKE-NO-ATTACHMENTS
+  skill: contract-intake-gate@1.0.8
+  verdict: passed
+  freeze:
+    attachment_manifest:
+      frozen: true
+      status: no_attachments
+      declared: []
+      referenced: []
+      delivered: []
+  all_frozen: true
+  flags: []
+  blocks: []
+  handoff: {to: clause-extractor, pending: []}

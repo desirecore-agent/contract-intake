@@ -1,0 +1,56 @@
+contract_intake_receipt:
+  intake_id: INTAKE-UNSIGNED-DRAFT-ASSISTANCE
+  skill: contract-intake-gate@1.0.8
+  verdict: passed
+  verdict_label: 通过
+  freeze:
+    execution_status:
+      frozen: true
+      signature_status: unsigned_draft
+      review_purpose: draft_negotiation_assistance
+      exception_basis:
+        request_scope_evidence:
+          source: current_user_request
+          quote: 请对本未签署草稿开展草稿/谈判辅助审查
+        material_evidence:
+          input_path: /workdir/contracts/c01-draft.md
+          page: 2
+          locator: 第9条
+          quote: 本草稿尚未签署，仅供谈判审查
+      verification_status: not_performed
+      parties:
+        - party: 甲方
+          name: 示例采购人
+          seal_field: not_covered
+          seal_evidence:
+            input_path: /workdir/contracts/c01-draft.md
+            page: 2
+            locator: 第9条
+            quote: 本草稿尚未签署，仅供谈判审查
+          signatory: null
+          title: null
+          date: null
+          complete: false
+          evidence_level: known_unsigned_draft
+          verification_status: not_performed
+  checks:
+    - id: S5
+      name: 签章状态
+      status: pass
+      finding: 已知未签署草稿；仅限草稿/谈判辅助审查，不可签署，未验证真实性、授权或合同效力
+  blocks: []
+  flags: []
+  handoff:
+    to: clause-extractor
+    review_purpose: draft_negotiation_assistance
+    exception_basis:
+      request_scope_evidence:
+        source: current_user_request
+        quote: 请对本未签署草稿开展草稿/谈判辅助审查
+      material_evidence:
+        input_path: /workdir/contracts/c01-draft.md
+        page: 2
+        locator: 第9条
+        quote: 本草稿尚未签署，仅供谈判审查
+    confirmed:
+      - 当前版本为已知未签署草稿；仅限草稿/谈判辅助审查，不可签署，未验证真实性、授权或合同效力

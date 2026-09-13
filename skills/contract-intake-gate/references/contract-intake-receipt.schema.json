@@ -1,0 +1,463 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Contract intake final receipt",
+  "description": "Local structural contract for the contract-intake agent's final YAML receipt. It validates only the receipt shape; it does not establish legal conclusions, cross-file consistency, signature authenticity, Human Gate completion, tool provenance, or durable audit evidence.",
+  "type": "object",
+  "required": ["contract_intake_receipt"],
+  "additionalProperties": false,
+  "properties": {
+    "contract_intake_receipt": { "$ref": "#/definitions/receipt", "description": "The only defined structured output of the intake gate." }
+  },
+  "definitions": {
+    "nonEmptyString": { "type": "string", "minLength": 1, "description": "A non-empty textual value recorded by the intake gate." },
+    "nullableString": { "type": ["string", "null"], "description": "A textual value when known, otherwise an explicit null." },
+    "shaOrUnknown": { "type": "string", "pattern": "^(unknown|[a-f0-9]{64})$", "description": "A FileDigest result or the literal unknown; never a model-invented digest." },
+    "sourceAnchor": {
+      "type": "object",
+      "description": "Evidence anchor identifying the observed material location; this is not proof of authenticity.",
+      "required": ["part", "page", "quote"],
+      "additionalProperties": false,
+      "properties": {
+        "part": { "$ref": "#/definitions/nonEmptyString", "description": "The body or attachment part containing the evidence." },
+        "page": { "type": ["integer", "null"], "minimum": 1, "description": "One-based page number when available." },
+        "quote": { "$ref": "#/definitions/nonEmptyString", "description": "Observed source quotation." },
+        "locator": { "type": "string", "description": "Additional stable location detail when a clause or page alone is insufficient." }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "description": "A block or flag outcome with its mandatory evidence and remediation action.",
+      "required": ["code", "gate_reason_id", "severity", "clause", "evidence", "finding", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "pattern": "^(BLK|FLG)-[A-Z0-9-]+$", "description": "Internal block or flag code." },
+        "gate_reason_id": { "type": ["string", "null"], "description": "Published downstream reason identifier, or null for a code without one." },
+        "severity": { "type": "string", "enum": ["block", "flag"], "description": "Whether the finding blocks intake or makes it conditional." },
+        "clause": { "type": ["string", "null"], "description": "Source clause number when available." },
+        "evidence": { "$ref": "#/definitions/sourceAnchor", "description": "Source-grounded evidence for this finding." },
+        "finding": { "$ref": "#/definitions/nonEmptyString", "description": "Explanation of the observed issue." },
+        "action": { "$ref": "#/definitions/nonEmptyString", "description": "Concrete remediation or downstream action." }
+      }
+    },
+    "check": {
+      "type": "object",
+      "description": "One required S1–S8 intake check result.",
+      "required": ["id", "name", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "enum": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"], "description": "Fixed intake check identifier." },
+        "name": { "$ref": "#/definitions/nonEmptyString", "description": "Human-readable check name." },
+        "status": { "type": "string", "enum": ["pass", "conditional", "block", "flag", "not_covered", "fail"], "description": "Recorded outcome; the agent still applies the Skill's verdict rules." },
+        "finding": { "type": "string", "description": "Supporting explanation where the check needs one." }
+      }
+    },
+    "freeze": {
+      "type": "object",
+      "description": "One of the four mandatory frozen input dimensions.",
+      "required": ["frozen"],
+      "additionalProperties": true,
+      "properties": {
+        "frozen": { "type": "boolean", "description": "Whether this dimension was frozen under its applicable Skill rule." }
+      }
+    },
+    "attachmentRecord": {
+      "type": "object",
+      "description": "One observed S4 attachment record. no/name/version/doc_no are source observations; a resolution never rewrites an absent observed version.",
+      "required": ["no", "name", "version", "doc_no"],
+      "additionalProperties": true,
+      "properties": {
+        "no": { "$ref": "#/definitions/nullableString", "description": "Observed attachment identifier, or null when a blocked finding records its absence." },
+        "name": { "$ref": "#/definitions/nullableString", "description": "Observed attachment name, or null when a blocked finding records its absence." },
+        "version": { "$ref": "#/definitions/nullableString", "description": "Observed version identifier when stated." },
+        "doc_no": { "$ref": "#/definitions/nullableString", "description": "Observed document number when stated." },
+        "source": { "$ref": "#/definitions/sourceAnchor", "description": "Source-specific evidence anchor; it does not change this record into another source class." },
+        "version_resolution": { "$ref": "#/definitions/versionResolution", "description": "A bounded derived identity for an observed body reference whose version is absent; it never changes version from null." }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "version_resolution": {} }, "required": ["version_resolution"] },
+          "then": { "properties": { "no": { "$ref": "#/definitions/nonEmptyString" }, "version": { "const": null } }, "required": ["no", "version"] }
+        }
+      ]
+    },
+    "versionResolution": {
+      "type": "object",
+      "description": "A narrow same-identifier resolution for a body reference with no observed version. The Skill verifies uniqueness across records; this schema validates only the closed evidence shape.",
+      "required": ["resolved_version", "basis", "explicit_reference_sources", "delivered_source"],
+      "additionalProperties": false,
+      "properties": {
+        "resolved_version": { "$ref": "#/definitions/nonEmptyString", "description": "The one version observed explicitly for this attachment identifier elsewhere in the body." },
+        "basis": { "const": "same_id_unique_explicit_version", "description": "The only allowed derivation basis; no natural-language or name-based inference is allowed." },
+        "explicit_reference_sources": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/definitions/sourceAnchor" }, "description": "Body anchors that explicitly state the resolved version for the same identifier." },
+        "delivered_source": { "$ref": "#/definitions/sourceAnchor", "description": "Anchor of the one delivered attachment with the same identifier and resolved version." }
+      }
+    },
+    "formalDeclaredAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/attachmentRecord" },
+        { "not": { "type": "object", "properties": { "version_resolution": {} }, "required": ["version_resolution"] } }
+      ],
+      "description": "A formal-list observation. It may retain an observed null version, but never carries a body-reference version resolution."
+    },
+    "identifiedAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/attachmentRecord" },
+        {
+          "type": "object",
+          "required": ["no", "name", "source"],
+          "properties": {
+            "no": { "$ref": "#/definitions/nonEmptyString" },
+            "name": { "$ref": "#/definitions/nonEmptyString" },
+            "source": { "$ref": "#/definitions/sourceAnchor", "description": "Required source anchor for a passed or conditional attachment identity." }
+          }
+        }
+      ],
+      "description": "A source-anchored attachment identity suitable for a passed or conditional receipt."
+    },
+    "sourceAnchoredAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/attachmentRecord" },
+        {
+          "type": "object",
+          "required": ["source"],
+          "properties": {
+            "source": { "$ref": "#/definitions/sourceAnchor", "description": "Required source anchor without inferring an absent identity field." }
+          }
+        }
+      ],
+      "description": "A source-anchored observation whose name, version, or document number may remain unknown."
+    },
+    "uniqueReferencedAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" },
+        {
+          "type": "object",
+          "required": ["no", "version"],
+          "properties": {
+            "no": { "$ref": "#/definitions/nonEmptyString" },
+            "version": { "$ref": "#/definitions/nonEmptyString" }
+          }
+        }
+      ],
+      "description": "A body reference with the explicit identifier and version required for the no-formal-list unique-match branch; its name is not inferred."
+    },
+    "resolvedReferencedAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" },
+        {
+          "type": "object",
+          "required": ["no", "version", "version_resolution"],
+          "properties": {
+            "no": { "$ref": "#/definitions/nonEmptyString" },
+            "version": { "const": null },
+            "version_resolution": { "$ref": "#/definitions/versionResolution" }
+          }
+        }
+      ],
+      "description": "A raw body reference without a stated version, accompanied by a typed same-identifier resolution. It remains raw version:null in the receipt."
+    },
+    "uniqueDeliveredAttachmentRecord": {
+      "allOf": [
+        { "$ref": "#/definitions/identifiedAttachmentRecord" },
+        {
+          "type": "object",
+          "required": ["version"],
+          "properties": {
+            "version": { "$ref": "#/definitions/nonEmptyString" }
+          }
+        }
+      ],
+      "description": "A delivered attachment with an independently observed complete identity for the no-formal-list unique-match branch."
+    },
+    "attachmentManifest": {
+      "type": "object",
+      "description": "S4 keeps formal declarations, body references, and delivered attachment identities separate; validation cannot prove their cross-file matching.",
+      "required": ["frozen", "status", "declared", "referenced", "delivered"],
+      "additionalProperties": true,
+      "properties": {
+        "frozen": { "type": "boolean", "description": "Whether the formal attachment-manifest dimension is frozen under S4." },
+        "status": { "type": "string", "enum": ["formal_list", "no_attachments", "authority_list_unavailable", "missing_formal_list", "blocked"], "description": "S4 evidence state; it never lets delivered data impersonate a formal declaration." },
+        "declared": { "type": ["array", "null"], "items": { "$ref": "#/definitions/formalDeclaredAttachmentRecord" }, "description": "Formal-list declarations only, null when no complete formal list is available. They never carry a body-reference resolution." },
+        "referenced": { "type": "array", "items": { "$ref": "#/definitions/attachmentRecord" }, "description": "Body references only." },
+        "delivered": { "type": "array", "items": { "$ref": "#/definitions/attachmentRecord" }, "description": "Actually delivered attachment identities only." }
+      }
+    },
+    "party": {
+      "type": "object",
+      "description": "Per-party S5 signature-field evidence. It never asserts signature authenticity or authority.",
+      "required": ["party", "name", "seal_field", "seal_evidence", "signatory", "title", "date", "complete", "evidence_level", "verification_status"],
+      "additionalProperties": false,
+      "properties": {
+        "party": { "$ref": "#/definitions/nonEmptyString", "description": "Party role." },
+        "name": { "$ref": "#/definitions/nonEmptyString", "description": "Party name as observed." },
+        "seal_field": { "type": "string", "enum": ["declared_in_text", "visual_mark_detected", "not_covered"], "description": "Observed seal-field state; not an authenticity claim." },
+        "seal_evidence": { "$ref": "#/definitions/sealEvidence", "description": "Source anchor for the seal-field state." },
+        "signatory": { "$ref": "#/definitions/nullableString", "description": "Observed signatory name, if present." },
+        "title": { "$ref": "#/definitions/nullableString", "description": "Observed signatory title, if present." },
+        "date": { "$ref": "#/definitions/nullableString", "description": "Observed signing date, if present." },
+        "complete": { "type": "boolean", "description": "Whether the required signature fields are complete under the Skill." },
+        "evidence_level": { "type": "string", "enum": ["declared_in_text", "visual_mark_detected", "not_covered", "known_unsigned_draft"], "description": "Bounded description of available signature evidence." },
+        "verification_status": { "const": "not_performed", "description": "The intake agent records no authenticity verification." },
+        "verification_note": { "type": "string", "description": "Optional limit on the recorded evidence." }
+      }
+    },
+    "sealEvidence": {
+      "type": "object",
+      "description": "Source information for an S5 seal or signature-field observation.",
+      "required": ["input_path", "locator"],
+      "additionalProperties": false,
+      "properties": {
+        "input_path": { "$ref": "#/definitions/nonEmptyString", "description": "Absolute source input path as returned or retained by the permitted workflow." },
+        "page": { "type": "integer", "minimum": 1, "description": "One-based source page when evidence is page-based." },
+        "image_index": { "type": "integer", "minimum": 0, "description": "Image index when an actual image observation is used." },
+        "locator": { "$ref": "#/definitions/nonEmptyString", "description": "Source location detail." },
+        "quote": { "type": "string", "description": "Original text quotation for text or uncovered evidence." },
+        "visual_description": { "type": "string", "description": "Description of a visible mark; never a verification claim." },
+        "tool_observation": {
+          "type": "object",
+          "description": "Actual UnderstandImage observation when visual_mark_detected is used.",
+          "required": ["tool", "summary"],
+          "additionalProperties": false,
+          "properties": {
+            "tool": { "const": "UnderstandImage", "description": "The only permitted tool name for a visual observation." },
+            "summary": { "$ref": "#/definitions/nonEmptyString", "description": "Actual tool observation summary." }
+          }
+        }
+      },
+      "anyOf": [
+        { "type": "object", "properties": { "page": {} }, "required": ["page"] },
+        { "type": "object", "properties": { "image_index": {} }, "required": ["image_index"] }
+      ]
+    },
+    "executionStatus": {
+      "type": "object",
+      "description": "S5 execution-status freeze. Its structural presence does not replace the Skill's signature and Human Gate rules.",
+      "required": ["frozen", "verification_status", "parties"],
+      "additionalProperties": false,
+      "properties": {
+        "frozen": { "type": "boolean", "description": "Whether execution status was frozen under S5." },
+        "signature_status": { "type": "string", "enum": ["unsigned_draft", "unknown", "conflicting"], "description": "Special S5 state when recorded." },
+        "review_purpose": { "type": "string", "description": "Restricted draft-assistance purpose when applicable." },
+        "exception_basis": { "$ref": "#/definitions/exceptionBasis", "description": "Required evidence for the narrow unsigned-draft exception." },
+        "verification_status": { "const": "not_performed", "description": "No signature authenticity or authority verification is performed." },
+        "parties": { "type": "array", "items": { "$ref": "#/definitions/party" }, "description": "Every party's recorded S5 evidence." }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "signature_status": { "const": "unsigned_draft" } }, "required": ["signature_status"] },
+          "then": { "type": "object", "properties": { "review_purpose": { "const": "draft_negotiation_assistance" }, "exception_basis": { "$ref": "#/definitions/exceptionBasis" } }, "required": ["review_purpose", "exception_basis"] }
+        }
+      ]
+    },
+    "exceptionBasis": {
+      "type": "object",
+      "description": "Paired request and material evidence required only for the defined unsigned-draft assistance exception.",
+      "required": ["request_scope_evidence", "material_evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "request_scope_evidence": {
+          "type": "object",
+          "required": ["source", "quote"],
+          "additionalProperties": false,
+          "properties": {
+            "source": { "const": "current_user_request", "description": "The only acceptable request-evidence source." },
+            "quote": { "$ref": "#/definitions/nonEmptyString", "description": "Verbatim request scope evidence." }
+          }
+        },
+        "material_evidence": {
+          "type": "object",
+          "required": ["input_path", "page", "locator", "quote"],
+          "additionalProperties": false,
+          "properties": {
+            "input_path": { "$ref": "#/definitions/nonEmptyString", "description": "Source material path." },
+            "page": { "type": "integer", "minimum": 1, "description": "Source page." },
+            "locator": { "$ref": "#/definitions/nonEmptyString", "description": "Source location." },
+            "quote": { "$ref": "#/definitions/nonEmptyString", "description": "Material statement that it is an unsigned draft." }
+          }
+        }
+      }
+    },
+    "pending": {
+      "type": "object",
+      "description": "A disclosed conditional handoff item; it does not authorize downstream self-resolution.",
+      "required": ["id", "from_flag", "must_escalate", "statement", "required_downstream_action"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/nonEmptyString", "description": "Stable pending identifier." },
+        "from_flag": { "type": "string", "pattern": "^FLG-[A-Z0-9-]+$", "description": "Flag that caused this pending item." },
+        "must_escalate": { "type": "boolean", "description": "Whether downstream escalation is mandatory." },
+        "statement": { "$ref": "#/definitions/nonEmptyString", "description": "Bounded pending statement." },
+        "required_downstream_action": { "$ref": "#/definitions/nonEmptyString", "description": "Required next action." },
+        "evidence": { "$ref": "#/definitions/sourceAnchor", "description": "Optional source anchor for the pending item." }
+      }
+    },
+    "handoff": {
+      "type": "object",
+      "description": "Verified handoff data returned to the synchronous Lead; Lead alone applies its receipt gates, ledger, and O2 dispatch.",
+      "required": ["to", "from", "case_id", "intake_id", "receipt_path", "object", "input_inventory", "confirmed", "pending", "scope", "do_not_pass"],
+      "additionalProperties": false,
+      "properties": {
+        "to": { "type": ["string", "null"], "enum": ["clause-extractor", null], "description": "Downstream target, or null for a blocked receipt." },
+        "from": { "const": "contract-intake", "description": "The source agent." },
+        "case_id": { "$ref": "#/definitions/nonEmptyString", "description": "Exact mirror of the validated inbound Delegate.context handoff.case_id; schema validation cannot prove the cross-message equality." },
+        "intake_id": { "type": "string", "pattern": "^INTAKE-[0-9]{8}-[0-9a-f]{8}$", "description": "The generated intake identifier mirrored from the receipt." },
+        "receipt_path": { "$ref": "#/definitions/nonEmptyString", "description": "Absolute path to this final receipt." },
+        "object": { "$ref": "#/definitions/objectIdentity", "description": "Reviewed contract identity." },
+        "input_inventory": { "$ref": "#/definitions/inputInventory", "description": "Lead-provided two-digest input inventory." },
+        "confirmed": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" }, "description": "Facts downstream may use subject to the existing Skill limits." },
+        "pending": { "type": "array", "items": { "$ref": "#/definitions/pending" }, "description": "Unresolved flag-backed handoff items." },
+        "scope": { "type": "object", "minProperties": 1, "description": "Declared downstream scope and frozen baseline." },
+        "do_not_pass": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" }, "minItems": 1, "description": "Information prohibited from handoff." },
+        "review_purpose": { "const": "draft_negotiation_assistance", "description": "The only permitted unsigned-draft assistance purpose when applicable." },
+        "exception_basis": { "$ref": "#/definitions/exceptionBasis", "description": "Mirrored unsigned-draft exception evidence when applicable." }
+      }
+    },
+    "objectIdentity": {
+      "type": "object",
+      "description": "Contract object identity supplied to the intake gate.",
+      "required": ["contract_object_id", "object_title", "submission_mode"],
+      "additionalProperties": false,
+      "properties": {
+        "contract_object_id": { "$ref": "#/definitions/nonEmptyString", "description": "Contract object identifier; never used as a path segment." },
+        "object_title": { "$ref": "#/definitions/nonEmptyString", "description": "Contract title." },
+        "submission_mode": { "type": "string", "enum": ["single", "version_comparison"], "description": "Whether one version or a comparison was submitted." },
+        "versions": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" }, "description": "Version labels for version-comparison submissions." }
+      }
+    },
+    "inputInventory": {
+      "type": "object",
+      "description": "The two distinct Lead O0 FileDigest values; neither is the S4 attachment-manifest digest.",
+      "required": ["submission_inventory_manifest_digest", "current_contract_manifest_digest"],
+      "additionalProperties": false,
+      "properties": {
+        "submission_inventory_manifest_digest": { "$ref": "#/definitions/shaOrUnknown", "description": "Digest of the complete submitted-file inventory." },
+        "current_contract_manifest_digest": { "$ref": "#/definitions/shaOrUnknown", "description": "Digest of the Lead-declared current contract set." }
+      }
+    },
+    "humanGate": {
+      "type": "object",
+      "description": "A legal or human action that the intake agent cannot replace.",
+      "required": ["trigger", "reason", "at"],
+      "additionalProperties": false,
+      "properties": {
+        "trigger": { "$ref": "#/definitions/nonEmptyString", "description": "Human Gate trigger." },
+        "reason": { "$ref": "#/definitions/nonEmptyString", "description": "Reason human action remains required." },
+        "at": { "$ref": "#/definitions/sourceAnchor", "description": "Source anchor for the Human Gate." }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "description": "Final intake receipt. Structural validity is not legal or signature proof.",
+      "required": ["intake_id", "intake_at", "executed_by", "skill", "verdict", "verdict_label", "verdict_basis", "object", "input_inventory", "scope", "freeze", "all_frozen", "consistency_conclusion_allowed", "checks", "blocks", "flags", "version_matrix", "alignment_advice", "human_gate", "remediation", "handoff"],
+      "additionalProperties": false,
+      "properties": {
+        "intake_id": { "type": "string", "pattern": "^INTAKE-[0-9]{8}-[0-9a-f]{8}$", "description": "ASCII intake identifier generated from GenerateUUID under the Skill rule." },
+        "intake_at": { "$ref": "#/definitions/nonEmptyString", "description": "Recorded local intake time." },
+        "executed_by": { "const": "contract-intake", "description": "Executing agent identity." },
+        "skill": { "type": "string", "pattern": "^contract-intake-gate@[0-9]+\\.[0-9]+\\.[0-9]+$", "description": "Applied intake skill version." },
+        "verdict": { "type": "string", "enum": ["passed", "conditional", "blocked"], "description": "Mechanical S1–S8 verdict." },
+        "verdict_label": { "type": "string", "enum": ["通过", "条件通过", "拒绝"], "description": "Human-readable verdict label." },
+        "verdict_basis": { "$ref": "#/definitions/nonEmptyString", "description": "Explanation grounded in the recorded checks and findings." },
+        "object": { "$ref": "#/definitions/objectIdentity", "description": "Contract identity." },
+        "input_inventory": { "$ref": "#/definitions/inputInventory", "description": "Separate submission and current-contract FileDigest values." },
+        "scope": { "type": "object", "minProperties": 1, "description": "S1 observed scope facts." },
+        "freeze": {
+          "type": "object",
+          "description": "All four mandatory frozen dimensions.",
+          "required": ["master_version", "page_range", "attachment_manifest", "execution_status"],
+          "additionalProperties": false,
+          "properties": {
+            "master_version": { "$ref": "#/definitions/freeze", "description": "S2 master-version freeze." },
+            "page_range": { "$ref": "#/definitions/freeze", "description": "S3 page-range freeze." },
+            "attachment_manifest": { "$ref": "#/definitions/attachmentManifest", "description": "S4 attachment-manifest evidence and freeze." },
+            "execution_status": { "$ref": "#/definitions/executionStatus", "description": "S5 execution-status freeze." }
+          }
+        },
+        "all_frozen": { "type": "boolean", "description": "Whether every mandatory freeze is frozen." },
+        "consistency_conclusion_allowed": { "type": "boolean", "description": "Whether the Skill permits a consistency conclusion." },
+        "checks": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/check" },
+          "allOf": [
+            { "contains": { "type": "object", "properties": { "id": { "const": "S1" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S2" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S3" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S4" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S5" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S6" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S7" } }, "required": ["id"] } },
+            { "contains": { "type": "object", "properties": { "id": { "const": "S8" } }, "required": ["id"] } }
+          ],
+          "description": "Exactly one recorded check for each fixed S1–S8 stage." 
+        },
+        "blocks": { "type": "array", "items": { "allOf": [{ "$ref": "#/definitions/finding" }, { "type": "object", "properties": { "code": { "type": "string", "pattern": "^BLK-" }, "severity": { "const": "block" } }, "required": ["code", "severity"] }] }, "description": "All BLK findings." },
+        "flags": { "type": "array", "items": { "allOf": [{ "$ref": "#/definitions/finding" }, { "type": "object", "properties": { "code": { "type": "string", "pattern": "^FLG-" }, "severity": { "const": "flag" } }, "required": ["code", "severity"] }] }, "description": "All FLG findings." },
+        "version_matrix": { "type": "object", "minProperties": 1, "description": "S8 version-matrix result." },
+        "alignment_advice": { "type": "array", "items": { "type": "object" }, "description": "S8 alignment advice entries." },
+        "human_gate": { "type": "array", "items": { "$ref": "#/definitions/humanGate" }, "description": "Human actions not replaced by the intake agent." },
+        "remediation": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" }, "description": "Imperative remediation list, required especially for blocked results." },
+        "handoff": { "$ref": "#/definitions/handoff", "description": "Verified handoff data returned to the synchronous Lead." }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "master_version": { "type": "object", "properties": { "frozen": { "const": false } }, "required": ["frozen"] } }, "required": ["master_version"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": false } }, "required": ["all_frozen"] }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "page_range": { "type": "object", "properties": { "frozen": { "const": false } }, "required": ["frozen"] } }, "required": ["page_range"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": false } }, "required": ["all_frozen"] }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": false } }, "required": ["frozen"] } }, "required": ["attachment_manifest"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": false } }, "required": ["all_frozen"] }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "execution_status": { "type": "object", "properties": { "frozen": { "const": false } }, "required": ["frozen"] } }, "required": ["execution_status"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": false } }, "required": ["all_frozen"] }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "master_version": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "page_range": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "execution_status": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] } }, "required": ["master_version", "page_range", "attachment_manifest", "execution_status"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "all_frozen": { "const": true } }, "required": ["all_frozen"] }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "passed" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "verdict_label": { "const": "通过" }, "all_frozen": { "const": true }, "freeze": { "type": "object", "properties": { "master_version": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "page_range": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] }, "execution_status": { "type": "object", "properties": { "frozen": { "const": true } }, "required": ["frozen"] } }, "required": ["master_version", "page_range", "attachment_manifest", "execution_status"] }, "blocks": { "type": "array", "maxItems": 0 }, "flags": { "type": "array", "maxItems": 0 }, "handoff": { "type": "object", "properties": { "to": { "const": "clause-extractor" } }, "required": ["to"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "conditional" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "verdict_label": { "const": "条件通过" }, "blocks": { "type": "array", "maxItems": 0 }, "flags": { "type": "array", "minItems": 1 }, "handoff": { "type": "object", "properties": { "to": { "const": "clause-extractor" } }, "required": ["to"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "passed" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "enum": ["formal_list", "no_attachments"] }, "declared": { "type": "array", "items": { "$ref": "#/definitions/identifiedAttachmentRecord" } }, "referenced": { "type": "array", "items": { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" } }, "delivered": { "type": "array", "items": { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" } } }, "required": ["status", "declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "conditional" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "declared": { "anyOf": [{ "type": "null" }, { "type": "array", "items": { "$ref": "#/definitions/identifiedAttachmentRecord" } }] }, "referenced": { "type": "array", "items": { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" } }, "delivered": { "type": "array", "items": { "$ref": "#/definitions/sourceAnchoredAttachmentRecord" } } }, "required": ["declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "passed" }, "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "const": "no_attachments" } }, "required": ["status"] } }, "required": ["attachment_manifest"] } }, "required": ["verdict", "freeze"] },
+          "then": { "type": "object", "properties": { "verdict": { "const": "passed" }, "all_frozen": { "const": true }, "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": true }, "declared": { "type": "array", "maxItems": 0 }, "referenced": { "type": "array", "maxItems": 0 }, "delivered": { "type": "array", "maxItems": 0 } }, "required": ["frozen", "declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "const": "missing_formal_list" } }, "required": ["status"] } }, "required": ["attachment_manifest"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "verdict": { "const": "conditional" }, "all_frozen": { "const": false }, "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": false }, "declared": { "type": "null" }, "referenced": { "type": "array", "minItems": 1, "items": { "oneOf": [{ "$ref": "#/definitions/uniqueReferencedAttachmentRecord" }, { "$ref": "#/definitions/resolvedReferencedAttachmentRecord" }] } }, "delivered": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/uniqueDeliveredAttachmentRecord" } } }, "required": ["frozen", "declared", "referenced", "delivered"] } }, "required": ["attachment_manifest"] }, "flags": { "type": "array", "contains": { "type": "object", "properties": { "code": { "const": "FLG-ATTACHMENT-MANIFEST-ABSENT" }, "gate_reason_id": { "const": "attachment-manifest-absent" } }, "required": ["code", "gate_reason_id"] } }, "handoff": { "type": "object", "properties": { "pending": { "type": "array", "contains": { "type": "object", "properties": { "id": { "const": "PEND-004" }, "from_flag": { "const": "FLG-ATTACHMENT-MANIFEST-ABSENT" }, "must_escalate": { "const": true } }, "required": ["id", "from_flag", "must_escalate"] } } }, "required": ["pending"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "status": { "const": "authority_list_unavailable" } }, "required": ["status"] } }, "required": ["attachment_manifest"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "verdict": { "const": "conditional" }, "all_frozen": { "const": false }, "freeze": { "type": "object", "properties": { "attachment_manifest": { "type": "object", "properties": { "frozen": { "const": false }, "declared": { "type": "null" } }, "required": ["frozen", "declared"] } }, "required": ["attachment_manifest"] }, "flags": { "type": "array", "contains": { "type": "object", "properties": { "code": { "const": "FLG-ATTACHMENT-MANIFEST-INCOMPLETE" }, "gate_reason_id": { "const": "attachment-manifest-incomplete" } }, "required": ["code", "gate_reason_id"] } }, "handoff": { "type": "object", "properties": { "pending": { "type": "array", "contains": { "type": "object", "properties": { "id": { "const": "PEND-001" }, "from_flag": { "const": "FLG-ATTACHMENT-MANIFEST-INCOMPLETE" }, "must_escalate": { "const": true } }, "required": ["id", "from_flag", "must_escalate"] } } }, "required": ["pending"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "verdict": { "const": "blocked" } }, "required": ["verdict"] },
+          "then": { "type": "object", "properties": { "verdict_label": { "const": "拒绝" }, "blocks": { "type": "array", "minItems": 1 }, "remediation": { "type": "array", "minItems": 1 }, "handoff": { "type": "object", "properties": { "to": { "const": null } }, "required": ["to"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "freeze": { "type": "object", "properties": { "execution_status": { "type": "object", "properties": { "signature_status": { "const": "unsigned_draft" } }, "required": ["signature_status"] } }, "required": ["execution_status"] } }, "required": ["freeze"] },
+          "then": { "type": "object", "properties": { "handoff": { "type": "object", "properties": { "review_purpose": { "const": "draft_negotiation_assistance" }, "exception_basis": { "$ref": "#/definitions/exceptionBasis" } }, "required": ["review_purpose", "exception_basis"] } } }
+        }
+      ]
+    }
+  }
+}

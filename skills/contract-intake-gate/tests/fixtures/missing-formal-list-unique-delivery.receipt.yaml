@@ -1,0 +1,40 @@
+contract_intake_receipt:
+  intake_id: INTAKE-MANIFEST-ABSENT-UNIQUE
+  skill: contract-intake-gate@1.0.8
+  verdict: conditional
+  verdict_label: 条件通过
+  freeze:
+    attachment_manifest:
+      frozen: false
+      status: missing_formal_list
+      declared: null
+      referenced:
+        - no: A1
+          name: null
+          version: v1
+          doc_no: null
+          source: {part: body, page: 2, quote: '附件A1-v1共1页为本合同组成部分'}
+      delivered:
+        - no: A1
+          name: 技术及验收标准
+          version: v1
+          doc_no: null
+          source: {part: 'attachment:附件A1', page: 1, quote: '附件编号：A1；附件版本：v1'}
+  all_frozen: false
+  flags:
+    - code: FLG-ATTACHMENT-MANIFEST-ABSENT
+      gate_reason_id: attachment-manifest-absent
+      severity: flag
+      clause: '9'
+      evidence: {part: body, page: 2, quote: '附件A1-v1共1页为本合同组成部分'}
+      finding: 未提供正式附件清单，但正文引用与唯一送达附件的编号和版本一致
+      action: 人工补齐或确认正式附件清单；整体附件范围仍为 not_covered
+  blocks: []
+  handoff:
+    to: clause-extractor
+    pending:
+      - id: PEND-004
+        from_flag: FLG-ATTACHMENT-MANIFEST-ABSENT
+        must_escalate: true
+        statement: 未取得正式附件清单，整体附件范围未冻结
+        required_downstream_action: 仅覆盖已唯一关联附件；其余附件范围标为 not_covered，等待人工确认
