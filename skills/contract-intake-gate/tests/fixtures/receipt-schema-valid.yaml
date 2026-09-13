@@ -1,14 +1,14 @@
 contract_intake_receipt:
-  intake_id: INTAKE-20260913-a02c0de1
+  intake_id: INTAKE-20260913-a1b2c3d4
   intake_at: '2026-09-13T10:00:00+08:00'
   executed_by: contract-intake
   skill: contract-intake-gate@1.0.8
-  verdict: conditional
-  verdict_label: 条件通过
-  verdict_basis: 权威附件清单未随材料送达，附件范围只能条件通过。
+  verdict: passed
+  verdict_label: 通过
+  verdict_basis: S1-S8 已完成，无 BLK 或 FLG，四大冻结已建立。
   object:
-    contract_object_id: R02-DEMO-2026-001
-    object_title: R02 附件清单不完整合同
+    contract_object_id: C01-DEMO-2026-001
+    object_title: 示例合同
     submission_mode: single
   input_inventory:
     submission_inventory_manifest_digest: unknown
@@ -19,17 +19,16 @@ contract_intake_receipt:
   freeze:
     master_version:
       frozen: true
-      contract_no: R02-DEMO-2026-001
+      contract_no: C01-DEMO-2026-001
     page_range:
       frozen: true
       parts: []
     attachment_manifest:
-      frozen: false
-      status: authority_list_unavailable
-      declared: null
+      frozen: true
+      status: no_attachments
+      declared: []
       referenced: []
       delivered: []
-      authority: '正文第 13.3 条指定另附《合同附件目录》为完整附件清单'
     execution_status:
       frozen: true
       verification_status: not_performed
@@ -48,7 +47,7 @@ contract_intake_receipt:
           complete: true
           evidence_level: declared_in_text
           verification_status: not_performed
-  all_frozen: false
+  all_frozen: true
   consistency_conclusion_allowed: true
   checks:
     - id: S1
@@ -62,7 +61,7 @@ contract_intake_receipt:
       status: pass
     - id: S4
       name: 附件清单对账
-      status: conditional
+      status: pass
     - id: S5
       name: 签章状态
       status: pass
@@ -76,14 +75,7 @@ contract_intake_receipt:
       name: 版本矩阵对齐
       status: pass
   blocks: []
-  flags:
-    - code: FLG-ATTACHMENT-MANIFEST-INCOMPLETE
-      gate_reason_id: attachment-manifest-incomplete
-      severity: flag
-      clause: '13.3'
-      evidence: {part: body, page: 1, quote: '完整附件清单见另附《合同附件目录》'}
-      finding: 权威附件清单未随本次材料送达，无法冻结完整 declared 集合
-      action: 补齐权威附件清单后重新确认附件范围
+  flags: []
   version_matrix:
     status: aligned
   alignment_advice: []
@@ -92,27 +84,22 @@ contract_intake_receipt:
   handoff:
     to: clause-extractor
     from: contract-intake
-    case_id: R02-DEMO-2026-001
-    intake_id: INTAKE-20260913-a02c0de1
-    receipt_path: C:/workspace/contract-review-members/contract-intake/INTAKE-20260913-a02c0de1.receipt.yaml
+    case_id: C01-DEMO-2026-001
+    intake_id: INTAKE-20260913-a1b2c3d4
+    receipt_path: C:/workspace/contract-review-members/contract-intake/INTAKE-20260913-a1b2c3d4.receipt.yaml
     object:
-      contract_object_id: R02-DEMO-2026-001
-      object_title: R02 附件清单不完整合同
+      contract_object_id: C01-DEMO-2026-001
+      object_title: 示例合同
       submission_mode: single
     input_inventory:
       submission_inventory_manifest_digest: unknown
       current_contract_manifest_digest: unknown
     confirmed:
       - S1-S8 已执行。
-    pending:
-      - id: PEND-001
-        from_flag: FLG-ATTACHMENT-MANIFEST-INCOMPLETE
-        must_escalate: true
-        statement: 未取得权威附件清单，未知附件不得视为已覆盖
-        required_downstream_action: 人工补齐并确认权威附件清单；未知附件相关检查项标为 not_covered，不得推测
+    pending: []
     scope:
       in_scope:
-        - 条款抽取（含附件相关条款）
+        - 条款抽取
       out_of_scope:
         - 风险打分
     do_not_pass:

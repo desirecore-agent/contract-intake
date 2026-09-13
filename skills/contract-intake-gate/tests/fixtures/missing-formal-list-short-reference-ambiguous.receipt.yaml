@@ -1,0 +1,41 @@
+contract_intake_receipt:
+  intake_id: INTAKE-MANIFEST-ABSENT-AMBIGUOUS-SHORT
+  skill: contract-intake-gate@1.0.8
+  verdict: blocked
+  freeze:
+    attachment_manifest:
+      frozen: false
+      status: blocked
+      declared: null
+      referenced:
+        - no: A1
+          name: null
+          version: v1
+          doc_no: null
+          source: {part: body, page: 1, quote: '型号见附件A1-v1'}
+        - no: A1
+          name: null
+          version: v2
+          doc_no: null
+          source: {part: body, page: 2, quote: '付款按附件A1-v2执行'}
+        - no: A1
+          name: null
+          version: null
+          doc_no: null
+          source: {part: body, page: 3, quote: '甲方按附件A1书面验收'}
+      delivered:
+        - no: A1
+          name: 技术及验收标准
+          version: v1
+          doc_no: null
+          source: {part: 'attachment:A1', page: 1, quote: '附件编号：A1；附件版本：v1'}
+  all_frozen: false
+  blocks:
+    - code: BLK-ATTACHMENT-VERSION-CONFLICT
+      gate_reason_id: version-mismatch
+      severity: block
+      clause: '9'
+      evidence: {part: body, page: 2, quote: '付款按附件A1-v2执行'}
+      finding: 同编号正文出现多个显式版本，短引用不得解析。
+      action: 统一附件版本后重新提交
+  handoff: {to: null}

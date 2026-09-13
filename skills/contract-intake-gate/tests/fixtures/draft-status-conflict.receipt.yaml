@@ -1,0 +1,24 @@
+contract_intake_receipt:
+  intake_id: INTAKE-DRAFT-STATUS-CONFLICT
+  skill: contract-intake-gate@1.0.8
+  verdict: blocked
+  verdict_label: 拒绝
+  freeze:
+    execution_status:
+      frozen: false
+      signature_status: conflicting
+      verification_status: not_performed
+      parties: []
+  checks:
+    - id: S5
+      name: 签章状态
+      status: block
+      finding: 草稿标签与已完成落款事实冲突
+  blocks:
+    - code: BLK-EXECUTION-STATUS-CONFLICT
+      gate_reason_id: signature-status-unconfirmed
+      severity: block
+  flags: []
+  handoff:
+    to: null
+    confirmed: []

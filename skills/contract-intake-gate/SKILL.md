@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.4
+version: 1.0.8
 type: procedural
 risk_level: low
 status: enabled
@@ -24,15 +24,16 @@ requires:
     - Read
     - Ls
     - Glob
+    - FileDigest
     - Grep
-    - Write
-    - MathCalc
+    - contract-intake-deterministic-check
     - GenerateUUID
     - UnderstandImage
+    - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.4
-  updated_at: '2026-09-10'
+  version: 1.0.8
+  updated_at: '2026-09-13'
 ---
 
 # 合同输入治理闸门
@@ -42,6 +43,14 @@ metadata:
 收到任何待审查的合同材料时**第一个**执行本技能。下游的条款抽取、风险识别、法域合规、
 复核出报告四个环节，只有在本技能给出 `通过` 或 `条件通过` 后才允许启动。
 
+## 本轮工具执行清单（先执行，后判定）
+
+1. 先按 S1–S8 顺序执行本技能要求的实际读取、搜索和摘要工具；`Grep` 的正则模式必须传
+   `is_regex: true`，逐字 quote 必须传 `is_regex: false`，不得混用。`FileDigest` 的单文件
+   `paths` 与多文件 `paths_json` 形状严格按 S1 使用，不得互换。
+2. S3 与 S7.2 金额子检查必须只由 `contract-intake-deterministic-check` 对受权 source snapshots 的实际计算写入。不得传入、复用或声称模型派生的页码/金额 pass flags；工具失败、受限、源摘要不符或输出不合格时，立即如实 `HOLD`，不得写最终 verdict 或交接。`MathCalc` 不是本 Agent 的证据路径。
+3. 全部业务事实完成后，先 `Read` 本地回执 Schema，再一次调用 `contract-intake-deterministic-check`，让平台以原子 JSON 输出写入最终 receipt 路径；随后 `Read` 该同一路径，最后调用 `StructuredFileValidate({document_path, schema_path, format: "yaml"})`。任一步失败按下文规则 HOLD；禁止并行、跳过回读或用结构校验代替 S1–S8 的真实执行。
+
 ## 不可协商的前提
 
 1. **S1→S8 顺序固定**，不得打乱、不得跳步、不得因为"看起来没问题"提前结束。顺序固定是为了让任何人重跑得到同样的过程。
@@ -49,16 +58,29 @@ metadata:
 3. **没检查到就显式留白**。检查矩阵里每一项都必须有状态；未覆盖写 `not_covered`，不得因为没提就当 `pass`。
 4. **四大冻结未全部成立时，禁止输出任何"一致 / 无差异 / 差异为 0"结论。**
 
-5. **结构化产物必须先保证 YAML 语法，再谈业务结论。** 机器消费的 `intake.yaml` 与回执
-   只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
+5. **结构化回执必须先保证 YAML 语法，再谈业务结论。** 本技能定义的机器消费产物是最终
+   `contract_intake_receipt` 回执；没有独立 `intake.yaml` 的路径、模板或数据契约，不得凭空
+   新建、验证或交接第二份同数据产物。回执可由确定性工具输出 JSON（JSON 是 YAML 的有效子集）；其他由 Agent 书写的 YAML 标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
    或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
    禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
-6. **回读声明必须有工具证据。** `Read` 只能证明文件内容已回读，不能证明 YAML 可解析。
-   本 Agent 的工具权限没有 YAML 解析器时，必须明确写“已回读，语法未由解析器验证”，不得
-   声称“YAML 可解析/通过 safe_load”；应在回执中保留待外部验证标记 `yaml_unverified`，并
-   将受影响结论降为 `conditional`，不得发送 `passed`。若未来环境提供专用 YAML 校验工具，
-   只有该工具返回成功后才可移除 `yaml_unverified`。
-7. **写入前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
+6. **回读与结构校验都必须有工具证据。** `Read` 只能证明文件内容已回读，不能证明 YAML
+   可解析。调用确定性工具前，必须先对本技能目录中的
+   `references/contract-intake-receipt.schema.json` 实际调用 `Read`；该读取失败即如实 HOLD，不得调用确定性工具生成最终回执
+   或交接。确定性工具原子写入最终回执并 `Read` 后，本技能必须实际调用一次
+   `StructuredFileValidate({document_path: <最终回执绝对路径>, schema_path: <本技能目录>/references/contract-intake-receipt.schema.json, format: "yaml"})`。
+   该调用仅验证 YAML 与本地 Draft-07 回执结构，不能证明跨文件一致性、法律结论、人类闸门、
+   签章真实性或任何 Compose 保证，也不得把模型声称的 `valid`、工具 hash 或审计字段写入业务回执。
+   现有回执协议没有 `yaml_unverified` 或验证状态字段；不得为了记录本次校验而向业务回执
+   凭空增加字段。工具调用成功且返回 `valid: true` 后，才可把已校验的候选文件作为最终回执并按
+   既有 verdict 规则交接。`valid: false` 时只允许修正确定性工具的 `receipt_base` 一次，并重新调用该工具、`Read` 同一路径及以相同
+   路径、schema 路径和 `format: "yaml"` 重验。第二次 `valid: false`、任何路径/schema/parser/runtime
+   工具错误或未获结果，均在本轮对话如实报告 `HOLD`、不调用 `Delegate` / `SendMessage` 向下游交接，
+   且不得把未验证或无效候选文件作为回执交付、不得伪造 `passed`、可信回执或 hash。验证成功后不得再修改该文件；任何后续修改都会使先前成功校验失效，交付前必须再次 `Read`
+   并重新实际调用校验工具。此验证不改变 S1–S8、四大冻结、verdict、Human Gate
+   与既有跨字段检查；这些业务检查仍必须在本 Agent 中完成。
+   特别是 `unsigned_draft` 的回执与交接 `exception_basis` 必须继续按既有规则逐字段精确镜像
+   比较；本地 Draft-07 只能校验两处各自的结构，不能证明跨位置值相等，不得将结构通过当作镜像通过。
+7. **将 `receipt_base` 交给工具前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
    等自由文本逐个检查引号配对与缩进；无法安全编码时用块标量，不得为了省字删掉证据或改写
    原文。写入后再次 `Read`，保持 `input_file.absolute_path`、SHA 和所有门禁字段不变。
 
@@ -94,6 +116,7 @@ metadata:
 | `party-name-inconsistency` | 是 | `BLK-PARTY-INCONSISTENT` / `BLK-PARTY-ROLE-CONFLICT` |
 | `amount-in-words-mismatch` | **否** | `FLG-AMOUNT-IN-WORDS-MISMATCH` |
 | `attachment-manifest-incomplete` | **否** | `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` |
+| `attachment-manifest-absent` | **否** | `FLG-ATTACHMENT-MANIFEST-ABSENT` |
 
 表外的内部编码（`BLK-OBJECT-UNIDENTIFIED`、`BLK-JURISDICTION-PACK-MISMATCH` 等）照常影响门禁结论，
 输出时 `gate_reason_id` 写 `null` 并在 `finding` 里说清楚。
@@ -104,7 +127,13 @@ metadata:
 
 **怎么检**
 
-1. 用 `Ls` / `Glob` 列出本次提交的全部文件，逐一 `Read`。
+1. 用 `Ls` / `Glob` 列出本次提交的全部文件，逐一 `Read`，再按以下顺序计算摘要：
+   a. 把本次已确认输入逐字冻结为 `submitted_file_paths` 的原始路径列表：用户给出的绝对路径直接复用，不得自动改写；当前团队 cwd 已确认且用户给出不含 `..` 的相对路径（可含子目录）时，直接原样提交工具，由工具按 context.cwd 和既有路径安全校验解析，不得先拼接长 cwd。cwd 不可用时记录该路径不能解析并停止该文件；不得猜测、缩短、重组/换根或改用旧 workspace。
+   b. 只用 `FileDigest`。`N = 1` 时唯一形状是 `FileDigest({paths: submitted_file_paths[0]})`，其中 `paths` 是原样裸字符串且 JSON 外观仍按字面路径处理。`N > 1` 时只有当前工具参数明示 `paths_json` 兼容入口才可调用唯一形状 `FileDigest({paths_json: JSON.stringify(submitted_file_paths)})`；这只是参数构造示例，不得调用 shell 或 JS。`paths_json` 必须是该完整集合的 JSON 字符串数组（1–100 项、UTF-8 不超过 64 KiB），解码后逐项等于 `submitted_file_paths`、不多不少，且不得同时传 `paths`、`file_path` 或 `path`。`FileDigest.paths_json` 是发布此批量规则的最小客户端能力要求；入口未提供时立即在既有 S1 finding/`unknown` failure reason 中写 `batch_unverified` 后停止 S1 摘要步骤。
+   c. 批量成功仅在返回 `files[].path` 逐项对应完整 `submitted_file_paths` 集合、`files[]` 完整且 `aggregate.file_count = N` 时成立；只用工具返回的 `absolute_path` 和 `digest` 登记既有规范绝对路径字段与摘要，不把 `absolute_path` 声称为自动 realpath 身份，才可记录完整集合 aggregate。只有 `FileDigest` 明确返回参数形态错误时，才可保持同一原集合和同一 `paths_json` 形状纠正一次；绝不拆成多个单文件调用、缩减集合或以单文件 aggregate 冒充批量。
+    d. 除 c 的明确参数形态错误外，权限拒绝、超限、文件消失、入口不可用、真实执行失败、返回缺项或 aggregate 数不符，都在既有 S1 finding/`unknown` failure reason 中明确 `batch_unverified` 和真实工具原因后停止 S1 摘要步骤；不得跨文件把冻结记为 `true`、编造 SHA-256 或以此为依据通过。本 Agent 的工具权限不含 `Bash`、`PowerShell` 或 `TerminalControl`，不得用 shell 诊断、重试或替代 `FileDigest`。
+
+**Lead 双集合摘要契约。**只有本次 `Delegate.context` 字符串中完整 YAML 的显式 `handoff.case_id` 可作为本案 case_id；`task` 只是执行指令，不承载或证明 case 身份。不得从 `task`、`intentId`、Work Context、旧回执或成员文本推导。Lead 的 O1 交接必须含 `submitted_file_paths`、`object.documents` 和 `input_inventory`；S1 的完整批量 aggregate 必须逐字等于 `input_inventory.submission_inventory_manifest_digest`；`object.documents` 只能是 Lead 已声明的 current 合同集，且 `object.manifest_digest` 必须逐字等于 `input_inventory.current_contract_manifest_digest`。`submission_inventory_manifest_digest` 与 `current_contract_manifest_digest` 都是既有内容摘要字符串：任一不可得写 `unknown` 并保留各自真实 `*_unavailable_reason`；不得互换、从一个推导另一个，或将当前集合缩成单文件。`context` 缺失、不能形成完整 handoff YAML、必需字段缺失、值不等、S1 aggregate 不等，或 object documents 含非 current 集合时，写 `O1_MANIFEST_CONTRACT_INVALID` 并 HOLD。S4 `attachment_manifest_digest` 仅是四字段对账表摘要，必须与两个 FileDigest 集合摘要分开记录、不得作为其别名或比较依据。
 2. 把内容切分为**文档部件（part）**：
    - `body` —— 合同正文
    - `attachment:<编号>` —— 随材料送达的附件正文（如 `attachment:附件二`、`attachment:Exhibit B`）
@@ -123,7 +152,7 @@ metadata:
 3. 识别提交模式：
    - `single` —— 单一版本受理
    - `version_comparison` —— 同一合同的两个及以上版本同时提交（要求做版本对照）
-4. 用 `GenerateUUID` 生成 `intake_id`，格式 `INTAKE-<YYYYMMDD>-<uuid 前 8 位>`。
+4. 用 `GenerateUUID` 生成 `intake_id`，且只能为 ASCII 格式 `INTAKE-YYYYMMDD-8hex`（正则 `^INTAKE-[0-9]{8}-[0-9a-f]{8}$`）：日期为本次生成日，`8hex` 取该次真实 UUID 的前 8 个小写十六进制字符。若不符合，重新调用 `GenerateUUID` 并按其真实返回值生成，不得从合同内容清洗、截取或派生 ID。
 
 **“组成合同的文件”与附件清单的边界**：正文以“组成本合同的文件包括……”列举采购文件、
 答疑/更正公告、中标公告、响应文件、补充协议等程序性材料时，如果没有显式的“附件清单 / 合同附件 /
@@ -211,13 +240,11 @@ freeze:
 
 **怎么检**
 
-1. 用 `Grep` 抓取全部页码标记。至少支持两种形态：
+1. 用 `Grep` 抓取全部页码标记。实际调用时，含页码、附件、占位或金额的正则模式传 `pattern` 加 `is_regex: true`；逐字 quote 复核传 `pattern` 加 `is_regex: false`，不得混用。至少支持两种形态：
    - 中文：`第 N 页 / 共 M 页`
    - 英文：`Page N of M`
 2. **按部件分组**。正文一段序列、每个附件各一段序列。
-3. 对每一组：
-   - 取声明总页数 `M`（组内 `M` 不唯一时 → `BLK-PAGE-TOTAL-CONFLICT`）
-   - 用 `MathCalc` 校验实际出现的页码集合是否等于 `{1..M}`
+3. 将受权 source snapshots 与按摘要绑定的 `part` 映射交给确定性工具。工具以原始字节计算每组页码：组内总页数冲突、缺号、重复和范围外页号都必须按输出记录；不得把 Grep 摘要、模型心算或候选 pass 字段作为结果。只有工具输出连续集合时才可通过本组。
    - 缺号 → 记录缺失页列表；重号 → 记录重复页列表
 
 > ⚠️ 最容易误报的地方：一个文件里可能同时存在"正文 1–7 / 共 7 页"和"附件 1–2 / 共 2 页"两段序列。
@@ -276,6 +303,16 @@ blocks:
    连同引用处写明的版本标识一并记录。
 3. **`delivered`（随材料送达的附件正文）** —— 来自 S1 的部件表。
 
+三组记录必须保留各自的来源锚点，绝不把正文引用或已交付附件的标题复制成
+`declared`。`declared` 只陈述正式附件清单已经声明的事实；`referenced` 只陈述正文
+引用；`delivered` 只陈述实际收到并可读的附件部件及其自身标识。
+回执的 `freeze.attachment_manifest` 必须始终写这三组字段与 `status`：正式清单为
+`formal_list`，没有任何附件引用或附件为 `no_attachments`，R9 为
+`authority_list_unavailable`，本节新增分支为 `missing_formal_list`，阻断事实为 `blocked`。
+`declared` 在 `passed` 或 `conditional` 时必须有非空编号、名称和来源锚点；`referenced`
+只记录正文实际可见字段，名称未知时保持 `null`，不得从 `delivered` 推导。新增唯一交付关联中
+`referenced` 必须有非空编号、版本和来源锚点，而 `delivered` 才必须有完整编号、名称、版本和来源锚点。
+
 **对账规则（顺序不可换）**
 
 | # | 规则 | 判定 |
@@ -289,6 +326,37 @@ blocks:
 | R7 | `declared` 条目**未随材料送达正文** | `SCOPE-ATTACHMENT-BODY-ABSENT`（**不是缺陷，不影响门禁结论**） |
 | R8 | 版本对比模式下，两版 `declared` 的同编号条目 `version` 或 `doc_no` 不同 | `FLG-ATTACHMENT-VERSION-CHANGED` + `must_escalate: true` |
 | R9 | 正文明确指向独立的**权威附件清单**（如“完整附件清单见另附《合同附件目录》”），但该清单未随材料送达，因而无法确定完整 `declared` 集合 | `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` + `PEND-001.must_escalate: true` |
+
+### 无正式附件清单时的唯一交付关联（新增，不改变 R1–R9）
+
+本分支只在材料**没有**正式附件清单、也没有“完整附件清单见另附”等单独权威清单
+声明时适用。它不是把 `delivered` 转写为 `declared`，也不声称完整附件集合已经冻结。
+
+只有同时满足以下条件，才可写 `conditional`：
+
+1. 每一个 `referenced` 附件都能与**唯一一个**实际 `delivered` 部件关联；
+2. 两侧可见的附件编号和版本标识逐字一致；附件正文自身有可回查的编号、名称和版本锚点；
+3. 每个关联同时保留正文引用锚点与已交付附件身份锚点，且没有额外未匹配的正文附件引用。
+
+**正文缩写不得改写原始事实。**`referenced[]` 的 `no`、`name`、`version`、`doc_no` 只记录该正文引用实际出现的字段；正文只写“附件 A1”时，`version` 必须是 `null`，不得因为别处出现 `A1-v1` 或已交付附件为 v1 而把原始记录改成 v1。为避免普通同编号缩写被误判为冲突，只有下列所有条件同时成立时，才可在该 raw `version: null` 记录附上闭合的 `version_resolution`：
+
+1. `no` 非空，且同一正文中的该 `no` 所有**显式**版本去重后恰为一个；
+2. `version_resolution.basis` 固定为 `same_id_unique_explicit_version`，`resolved_version` 逐字等于该唯一显式版本；
+3. `explicit_reference_sources[]` 逐条锚定该同编号的显式版本，`delivered_source` 锚定唯一一个编号及版本均相同、身份完整的已交付附件；
+4. 不存在第二个同编号已交付候选、第二个显式版本、或原文已写出的不同版本。
+
+这只是关联用的派生事实，绝不覆盖 raw `version: null`、绝不把已交付标题写成正文标题，也不能从名称、相邻条款、模型记忆或自然语言相似性推断。无显式版本锚、多个显式版本、多个已交付候选或任一冲突时不得解析，按既有 `BLK-ATTACHMENT-UNIDENTIFIED` 或 `BLK-ATTACHMENT-VERSION-CONFLICT` 阻断；正式清单场景仍以 `declared` 自身的观察字段为准，不能用 delivered 冒充 declared。
+
+此时写 `declared: null`、`attachment_manifest.frozen: false`、`all_frozen: false`、
+`FLG-ATTACHMENT-MANIFEST-ABSENT`（`gate_reason_id: attachment-manifest-absent`）和唯一
+`PEND-004`（`from_flag` 同该 FLG，`must_escalate: true`）。交接必须要求人工补齐或确认
+正式附件清单；下游只能覆盖已唯一关联的附件内容，所有整体附件范围结论仍为
+`not_covered`。
+
+任一正文引用无已交付匹配、对应多个候选、编号或版本冲突、附件自身身份不完整，均不得
+进入本分支：按已有 `BLK-ATTACHMENT-MISSING`、`BLK-ATTACHMENT-VERSION-CONFLICT` 或
+`BLK-ATTACHMENT-UNIDENTIFIED` 如实阻断。正文明确另有权威清单却未送达时，仍只走 R9；
+不得改用本分支。无正文附件引用且无附件的空集合可以正常通过。
 
 > ⚠️ **R5/R6 的分界必须守住。**"附件一《岗位职责说明书》""Exhibit A — Statement of Work Template"
 > 没有版本号，是常见且合法的写法。**只记 `SCOPE-`，既不阻断也不把门禁结论降为 `conditional`。**
@@ -329,7 +397,7 @@ R9 命中且不存在任一 `BLK-*` 时，必须同时满足以下条件：
 
 `must_escalate` **不**是全部 `FLG-*` 或全部未送达附件的通用推导。R8 继续按既有版本变化语义
 单独升级；R7 的 `SCOPE-ATTACHMENT-BODY-ABSENT` 仍可在无 `BLK-*` / `FLG-*` 时得到 `passed`，
-且不得生成 `PEND-001`。
+且不得生成 `PEND-001` 或 `PEND-004`。`PEND-004` 只属于上节的无正式清单唯一交付关联。
 
 **失败后输出什么**
 
@@ -337,6 +405,7 @@ R9 命中且不存在任一 `BLK-*` 时，必须同时满足以下条件：
 freeze:
   attachment_manifest:
     frozen: false
+    status: blocked
     declared:
       - {no: 附件一, name: 接口对接清单, version: null, doc_no: null}
       - {no: 附件二, name: 技术规格书, version: V1.1, doc_no: null}
@@ -394,19 +463,36 @@ blocks:
    `Signature` 有实际签署痕迹（手写名、`/s/ Name` 电子签形式）为准。
 3. 首部声明的 `execution_date_declared` 与落款 `Date` 不一致时，以**两者都必须有值且相等**为通过条件。
 
+### 已知未签署草稿的辅助审查例外
+
+仅当用户在**本次请求**明确要求草稿/谈判辅助审查，且本次材料自身明确声明当前版本为未签署草稿，
+并且没有执行/签署审查要求或已完成落款/签章事实冲突时，才可将签署状态记为 `unsigned_draft`。这不是从缺少落款区、签名或日期反推出来的状态：状态未知、仅称“草稿”却未明确未签、混合执行请求、或材料与声明冲突时，仍按本节原有阻断规则处理。
+
+在这一狭窄情形，S5 冻结的是“当前版本已知未签署”的状态记录，而不是签章字段完整性：
+`freeze.execution_status.frozen: true`、`signature_status: unsigned_draft`、`verification_status: not_performed`，每一方仍用
+`seal_field: not_covered`、带真实来源锚点的 `seal_evidence` 和 `evidence_level: known_unsigned_draft` 记录未签事实。
+S5 可记 `pass`，但回执和交接必须同时记录 `review_purpose: draft_negotiation_assistance` 与同值的 `exception_basis`：
+`request_scope_evidence` 必须逐字引用本轮用户草稿/谈判辅助审查范围，`material_evidence` 必须含材料绝对 `input_path`、`page`、`locator` 与明确未签草稿的原文 `quote`。回执和交接必须明确仅限草稿/谈判辅助审查、不可签署、未验证真实性、授权或合同效力；不得把 `unsigned_draft` 写成已签署、已生效或已验真。
+
+用户要求执行/签署审查，或需要判断签署状态、签署权限、签章真实性或合同效力时，此例外不适用；
+即使材料自称草稿，也必须按原有 S5 门禁阻断。草稿标签与已完成落款/签章事实冲突时，仍为 `BLK-EXECUTION-STATUS-CONFLICT`。
+
 ### 签章证据级别（只描述已见证据）
 
-S5 的 `frozen: true` 只表示签章**字段完整性**已按下列证据冻结，不表示签章真实性、授权、合同效力或实际签署已经验证。对每一方在 `freeze.execution_status.parties[]` **必须**写 `evidence_level`、`seal_evidence` 与 `verification_status`，并在交接的已确认事项中带同样的限定；缺任一结构化证据字段，该方 S5 不得记 `pass`。
+除已知未签署草稿辅助审查例外外，S5 的 `frozen: true` 只表示签章**字段完整性**已按下列证据冻结，不表示签章真实性、授权、合同效力或实际签署已经验证。对每一方在 `freeze.execution_status.parties[]` **必须**写 `evidence_level`、`seal_evidence` 与 `verification_status`，并在交接的已确认事项中带同样的限定；缺任一结构化证据字段，该方 S5 不得记 `pass`。
 
 | `evidence_level` | 可据此陈述 | 不得据此陈述 |
 |---|---|---|
 | `declared_in_text` | 原文文本声明有公章/签名/职务/日期，且字段完整；印章字段须写 `seal_field: declared_in_text`，`seal_evidence` 必须含实际 `input_path`（绝对路径）、`page`、`locator` 与原文 `quote` | `seal: present`；印章、签名、授权或实际签署真实有效；已做图像或电子签验证 |
 | `visual_mark_detected` | 已用本次实际 `UnderstandImage` 观察到印章或签名标记；`seal_evidence` 必须含实际 `input_path`（绝对路径）、`page` 或 `image_index`、`locator`、`visual_description` 和该次 `tool_observation`（`tool: UnderstandImage` + `summary`） | 标记真实、来源可信、授权有效，或已完成电子签验真 |
 | `not_covered` | S5 字段缺失或无法观察；仍须用 `seal_field: not_covered` 和含实际 `input_path`、`page`、`locator`、`quote` 的 `seal_evidence` 说明缺口 | 任何正向签章状态或验真结论 |
+| `known_unsigned_draft` | 仅上述草稿辅助审查例外：材料明确的当前未签署草稿状态，证据仍锚定原文 | 已签署、已生效、真实性、授权或合同效力已验证 |
 
 纯 Markdown / OCR 文本中“已加盖单位公章”、姓名、职务和日期齐备时，使用 `declared_in_text`，`seal_field: declared_in_text`、完整 `seal_evidence` 和 `verification_status: not_performed`，并写明“未做图像或电子签真实性验证”。它仍可通过**字段完整**门禁；不要因缺少图像而误报 `BLK-SIGNATURE-INCOMPLETE`。只有对本次输入实际调用 `UnderstandImage` 并取得可审计观察摘要时，才可使用 `visual_mark_detected`，且 `verification_status` 仍为 `not_performed`；不得编造工具调用、观察摘要或引用。本技能没有验签工具或可信验真结果结构：禁止输出 `authenticity_verified`；外部证明材料最多引用其来源声明，也不得把图像可见升级为验真。
 
 **命中什么算失败**
+
+下表的缺签署人、日期、职务、公章标注或整体无落款区阻断，只有同时满足上述两项草稿辅助审查前提、无执行请求且无冲突，并完整记录 `review_purpose` 与两类 `exception_basis` 证据时才不触发；此豁免只针对这些缺字段，绝不豁免其他 S1–S8 门禁。
 
 | 情形 | 判定 |
 |---|---|
@@ -639,8 +725,7 @@ blocks:
    - `人民币<大写>元整（¥<小写>）`
    - `<小写>元（大写：<大写>）`
    - `RMB <小写> (SAY <大写> ONLY)`
-2. 把中文大写逐字转成数值（`壹贰叁肆伍陆柒捌玖` / `拾佰仟萬万亿` / `零` / `角分`），
-   用 `MathCalc` 与小写数值做**精确**比较。
+2. 确定性工具以 BigInt 将受权 source snapshots 中的中文大写和阿拉伯金额转为精确 cents 后比较。只有工具输出精确相等才可判相等；工具缺失、失败、无输出、金额语法不确定或源格式不支持时，不得自行比较或把 S7 写成 `pass`，并如实 HOLD。
 3. 只在**成对**出现时比较。单独出现的大写金额或小写金额不参与本检查。
 
 **命中什么算失败**
@@ -679,7 +764,7 @@ flags:
 
 | 维度 | 取值来源 | 不一致时的动作 |
 |---|---|---|
-| `skill_version` | 本技能 frontmatter 的 `version` | 标记 + 建议**重跑**本次受理 |
+| `skill_version` | 本次实际加载的本技能 frontmatter `version` | 标记 + 建议**重跑**本次受理 |
 | `server_version` | 运行时上报的服务版本 | 标记 + 建议**人工确认** |
 | `knowledge_base_version` | 团队知识库 / 业务本体的版本戳 | 标记 + 建议**重算历史样本** |
 | `jurisdiction_pack_version` | 法域规则包版本（如 `cn-v3` / `us-v2`） | **与法域线索不一致时阻断** |
@@ -721,7 +806,8 @@ flags:
 
 ```yaml
 version_matrix:
-  skill_version:             {current: "1.0.1",      expected: "1.0.1",  aligned: true}
+  # 本次实际加载的 contract-intake-gate frontmatter version；示例占位符不得照抄为运行时值。
+  skill_version:             {current: "<当前实际加载本技能 frontmatter version>", expected: "<当前实际加载本技能 frontmatter version>", aligned: true}
   server_version:            {current: "10.0.133",   expected: "10.0.133", aligned: true}
   knowledge_base_version:    {current: "2026-07-18", expected: "2026-08-20", aligned: false}
   jurisdiction_pack_version: {current: "us-v2",      expected: "cn-v3",  aligned: false}
@@ -768,7 +854,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 **不是** `conditional`。这是本技能最容易出的门禁错判：
 把"附件没写版本号""附件正文没随材料来"这类客观范围事实当成缺陷，会让一大批正常合同被降级。
 
-四大冻结任一 `frozen: false` 但又没有对应的 `BLK-*`，也没有**明确解释该冻结缺口的
+`all_frozen` 是四项 typed `freeze.master_version.frozen`、`freeze.page_range.frozen`、`freeze.attachment_manifest.frozen`、`freeze.execution_status.frozen` 的逻辑 AND，必须逐字段据实写入；`verdict_basis` 只是解释，不是冻结状态来源，绝不得笼统声称“四大冻结全部成立”而任一 typed 字段为 `false`。四大冻结任一 `frozen: false` 但又没有对应的 `BLK-*`，也没有**明确解释该冻结缺口的
 `FLG-*`** 时，说明检查逻辑有漏洞——此时按 `conditional` 处理并补记
 `FLG-FREEZE-INCOMPLETE`，**不得**按 `passed` 处理。R9 已由
 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` 明确解释附件清单冻结缺口；不得再附加
@@ -796,7 +882,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 2. **不调用 `Delegate`，不调用 `SendMessage` 向下游成员发送材料。**
 3. **不输出条款清单、风险清单或任何形式的"完整审查结论"**，也不得附带"注意风险后可继续"的表述。
 4. 产出补齐清单 `remediation`：每条 = 缺什么 + 在哪一页 + 补成什么样，用祈使句。
-5. 回执照常落盘（拒绝也是一次正式受理，必须可回放）。
+5. 回执照常由确定性工具原子落盘（拒绝也是一次正式受理，必须可回放）。
 
 **结论为 `conditional` 时的强制动作**
 
@@ -811,12 +897,17 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 ### 落盘位置
 
 ```
-<有效工作目录>/contract-review/<contract_object_id>/intake/<intake_id>.receipt.yaml
+<有效工作目录>/contract-review-members/contract-intake/<intake_id>.receipt.yaml
 ```
 
 `<有效工作目录>` 取当前会话的工作目录，**用 `Ls` 实际确认后使用绝对路径**，
-不要在提示词或产物里写死任何用户主目录字面量。旧回执**保留不覆盖**——
-规则更新后要靠它们做历史回放与差异对比。
+不要在提示词或产物里写死任何用户主目录字面量。路径中只能使用本技能生成并核验格式的
+`intake_id`；合同中的原始 `contract_object_id` 仅保留在回执字段，绝不插入、清洗或转换为路径段。若 handoff 提供
+`canonical_artifact_root`，它及其全部子目录仅供读取，成员回执必须按完整路径段确认不在该保留根内；
+`lead_workspace` 只用于定位来源，不得据此自行切换到其他私有目录。若声明的
+`canonical_artifact_root` 恰覆盖上述成员命名空间，或规范化路径、既有目录链接使保留根关系无法确认，记录配置冲突并停止，不得写入保留根或改投其他位置。该成员命名空间只约定产物归属，不是额外安全沙箱；真实写入仍受平台路径授权约束，且不得调用 shell 做路径校验。旧回执**保留不覆盖**——规则更新后要靠它们做历史回放与差异对比。
+
+`Ls` 必须实际确认 effective cwd 与既有成员输出父目录；`output_path` 只能是该已存在受权目录内、由本次真实 `intake_id` 构成且尚不存在的唯一 `<intake_id>.receipt.yaml`。父目录缺失、路径已存在或平台返回的 output path 不等于请求的唯一目标时如实 HOLD，不得改投其他根。完成既有 scope 校验后，将该绝对 `receipt_path` 仅作为确定性工具的 `output_path` 参数；平台以受权 create-only 原子输出写入。不得调用 Bash/mkdir、普通 `Write` / `Edit`，也不得循环 `Ls` 猜测或创建目录。
 
 ### 回执完整结构
 
@@ -825,7 +916,7 @@ contract_intake_receipt:
   intake_id: INTAKE-20260331-7f3a2c9b
   intake_at: 2026-03-31T09:12:04+08:00
   executed_by: contract-intake          # 执行 Agent
-  skill: contract-intake-gate@1.0.4
+  skill: contract-intake-gate@<当前实际加载本技能 frontmatter version>  # 运行时逐字绑定，示例占位符不得照抄
   verdict: blocked                      # passed | conditional | blocked
   verdict_label: 拒绝                   # 通过 | 条件通过 | 拒绝；必须与 verdict 对应
   verdict_basis: "命中 5 类阻断：placeholder-unfilled(×9) / page-discontinuity / attachment-missing / version-mismatch / party-name-inconsistency"
@@ -835,6 +926,10 @@ contract_intake_receipt:
     object_title: 软件开发外包合同
     submission_mode: single
 
+  input_inventory:                      # Lead O0 摘要；不是 S4 四字段对账表
+    submission_inventory_manifest_digest: <64-lowercase-sha256-or-unknown>
+    current_contract_manifest_digest: <64-lowercase-sha256-or-unknown>
+
   scope: {...}                          # S1
   freeze:                               # 四大冻结
     master_version: {...}               # S2
@@ -842,6 +937,12 @@ contract_intake_receipt:
     attachment_manifest: {...}          # S4
     execution_status:                   # S5；冻结字段完整性，不等同真实性验证
       frozen: false
+      # 仅已知未签署草稿的辅助审查例外填写以下三项；其他分支省略，绝不虚构草稿例外。
+      signature_status: <unsigned_draft>
+      review_purpose: draft_negotiation_assistance
+      exception_basis:
+        request_scope_evidence: {source: current_user_request, quote: <本轮草稿/谈判辅助审查范围原文>}
+        material_evidence: {input_path: /abs/path/..., page: <页码>, locator: <定位>, quote: <明确未签草稿原文>}
       verification_status: not_performed # 两种允许的证据级别都必须明确未验真
       parties: [...]
   all_frozen: false
@@ -907,14 +1008,24 @@ contract_intake_receipt:
 handoff:
   to: clause-extractor                  # verdict 为 blocked 时必须为 null
   from: contract-intake
+  case_id: <已验证入站 Delegate.context.handoff.case_id；逐字镜像，不得从 task/intentId/Work Context 推断>
   intake_id: INTAKE-20260331-7f3a2c9b
   receipt_path: /abs/path/.../INTAKE-20260331-7f3a2c9b.receipt.yaml
+  # 仅已知未签署草稿的辅助审查例外填写以下两项；其他分支省略，绝不虚构草稿例外。
+  review_purpose: draft_negotiation_assistance
+  exception_basis:
+    request_scope_evidence: {source: current_user_request, quote: <本轮草稿/谈判辅助审查范围原文>}
+    material_evidence: {input_path: /abs/path/..., page: <页码>, locator: <定位>, quote: <明确未签草稿原文>}
 
   object:                               # 交接对象编号
     contract_object_id: YCIT-SAAS-2025-0206
     object_title: 软件即服务（SaaS）订阅服务协议
     submission_mode: version_comparison
     versions: [C06a-saas-v1, C06b-saas-v2]
+
+  input_inventory:                      # 必须与 receipt 中逐字相同；不能由 S4 表摘要替代
+    submission_inventory_manifest_digest: <64-lowercase-sha256-or-unknown>
+    current_contract_manifest_digest: <64-lowercase-sha256-or-unknown>
 
   confirmed:                            # 已确认事项（下游可直接当作事实使用）
     - 主版本已冻结：合同编号 YCIT-SAAS-2025-0206，正文共 7 页，页码 1–7 连续
@@ -947,7 +1058,7 @@ handoff:
       - 最终评分与动作建议（属复核出报告 Agent）
     frozen_baseline:
       master_version: YCIT-SAAS-2025-0206
-      attachment_manifest_digest: <四字段对账表的摘要>
+      attachment_manifest_digest: <四字段对账表的摘要；不是 FileDigest 集合摘要>
       page_range: {body: "1-7", "attachment:附件二": "1-2"}
       execution_status: declared_in_text@2025-11-03
     consistency_conclusion_allowed: false
@@ -958,8 +1069,10 @@ handoff:
     - 任何未经 evidence 锚定的判断
 ```
 
-**交接方式**：用 `Delegate`（`mode: sync`）把上面的 YAML 块作为 `context` 传给
-`handoff.to`。引用的所有文件必须写**绝对路径**——下游 Agent 的工作目录与你不同。
+**返回方式**：Intake 只向同步调用它的 Lead 返回已验证的最终回执和上面的 `handoff` 数据，
+不得自行 `Delegate` 或 `SendMessage` 给 `clause-extractor` 或任何下游。`handoff.to` 只是 Lead
+在既有 RC 与账本门禁完成后唯一 O2 派发所用的目标数据；Lead 的 RC、账本和派发责任不在 Intake
+转移。引用的所有文件必须写**绝对路径**——下游 Agent 的工作目录与你不同。
 
 ---
 
@@ -985,6 +1098,8 @@ handoff:
 - [ ] 附件正文未随材料送达只记 `SCOPE-`，没有报成 `attachment-missing`
 - [ ] 仅在未取得权威附件清单、无法确定完整 `declared` 集合时才报 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE`；
       普通附件正文未送达、R6 与 R8 不得误用该标记或生成 `PEND-001`
+- [ ] 没有正式附件清单时，未把正文或交付标题伪写入 `declared`；只有逐项唯一交付关联才使用
+      `FLG-ATTACHMENT-MANIFEST-ABSENT` + `PEND-004`，并保留 `declared: null`、冻结未完成和整体范围 `not_covered`
 - [ ] 身份证 / 手机号 / 邮箱的星号掩码没有被判成占位符
 - [ ] 首部定义过的简称没有被误报为主体不一致
 - [ ] 英文合同没有因为"没有公章字样"被判缺签章
@@ -1014,3 +1129,4 @@ handoff:
 
 - [ ] 回执落盘用的是实际确认过的绝对路径，没有写死用户主目录字面量
 - [ ] 旧回执未被覆盖，本次是新的 `intake_id`
+- [ ] `unsigned_draft` 例外同时在回执与交接记录 `review_purpose: draft_negotiation_assistance`，以及本轮请求范围引用和材料绝对路径、页码、定位、原文的 `exception_basis`

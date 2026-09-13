@@ -1,0 +1,20 @@
+contract_intake_receipt:
+  intake_id: INTAKE-FORMAL-MISSING-IDENTITY
+  skill: contract-intake-gate@1.0.8
+  verdict: blocked
+  freeze:
+    attachment_manifest:
+      frozen: false
+      status: blocked
+      declared: [{no: A1, name: null, version: v1, doc_no: null}]
+      referenced: [{no: A1, name: null, version: v1, doc_no: null}]
+      delivered: []
+  blocks:
+    - code: BLK-ATTACHMENT-UNIDENTIFIED
+      gate_reason_id: null
+      severity: block
+      clause: '附件清单'
+      evidence: {part: body, page: 2, quote: '附件A1 | v1'}
+      finding: 正式附件清单条目缺附件名称，身份不能冻结
+      action: 补齐附件名称后重新提交
+  handoff: {to: null}

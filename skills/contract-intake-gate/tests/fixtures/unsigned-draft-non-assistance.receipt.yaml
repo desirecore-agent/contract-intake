@@ -1,0 +1,18 @@
+contract_intake_receipt:
+  intake_id: INTAKE-UNSIGNED-DRAFT-NON-ASSISTANCE
+  verdict: blocked
+  verdict_label: 拒绝
+  freeze:
+    execution_status:
+      frozen: false
+      signature_status: unsigned_draft
+      verification_status: not_performed
+      parties: []
+  checks:
+    - id: S5
+      status: block
+      finding: 材料明确未签署，但用户未请求草稿/谈判辅助审查
+  blocks:
+    - code: BLK-SIGNATURE-BLOCK-ABSENT
+  handoff:
+    to: null
