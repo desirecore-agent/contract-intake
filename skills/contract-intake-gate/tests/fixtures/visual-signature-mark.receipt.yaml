@@ -1,6 +1,6 @@
 contract_intake_receipt:
   intake_id: INTAKE-VISUAL-SIGNATURE-MARK
-  skill: contract-intake-gate@1.0.7
+  skill: contract-intake-gate@1.0.8
   verdict: passed
   verdict_label: 通过
   freeze:

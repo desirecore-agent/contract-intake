@@ -1,6 +1,6 @@
 {
   "$schema": "http://desirecore/schemas/agent.json",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "name": "合同输入治理官",
   "description": "合同审查流水线的第一道闸门。执行 5 分钟硬校验与四大冻结（主版本 / 附件清单 / 页码范围 / 签章状态），对占位符、缺失附件、签署状态未确认、页码断裂、主体名称不一致直接阻断；签章只按有来源锚点的文本声明或可见标记分级，绝不把文本或图像标记冒充真实性验证。",
   "author": "DesireCore",
@@ -80,17 +80,15 @@
       "Ls",
       "Glob",
       "Grep",
-      "Write",
-      "Edit",
       "Skill",
-      "MathCalc",
       "GenerateUUID",
       "UnderstandImage",
       "AskUserQuestion",
       "Delegate",
       "SendMessage",
       "FileDigest",
-      "StructuredFileValidate"
+      "StructuredFileValidate",
+      "contract-intake-deterministic-check"
     ],
     "denied": [
       "Bash",

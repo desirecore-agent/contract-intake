@@ -69,6 +69,15 @@ test('release-owned final receipt schema accepts the defined receipt and rejects
   }
   assert.equal(validate(resolutionPollutesFormalDeclaration), false)
 
+  const noAttachmentPaginationUnknown = structuredClone(receipt)
+  noAttachmentPaginationUnknown.contract_intake_receipt.verdict = 'conditional'
+  noAttachmentPaginationUnknown.contract_intake_receipt.verdict_label = '条件通过'
+  noAttachmentPaginationUnknown.contract_intake_receipt.all_frozen = false
+  noAttachmentPaginationUnknown.contract_intake_receipt.freeze.page_range.frozen = false
+  noAttachmentPaginationUnknown.contract_intake_receipt.flags = [{
+    code: 'FLG-PAGINATION-ABSENT', gate_reason_id: null, severity: 'flag', clause: null, evidence: { part: 'body', page: null, quote: 'no static page mark' }, finding: 'No static page mark.', action: 'Provide static page marks.',
+  }]
+  assert.equal(validate(noAttachmentPaginationUnknown), true, JSON.stringify(validate.errors))
   const missingFormalList = structuredClone(receipt)
   const missingFormalReceipt = missingFormalList.contract_intake_receipt
   missingFormalReceipt.verdict = 'conditional'
@@ -180,32 +189,45 @@ test('release-owned final receipt schema accepts the defined receipt and rejects
   assert.equal(validate(allTrueButAllFrozenFalse), false)
 })
 
-test('source wiring allows and requires only the readonly structural validation tool for this new check', async () => {
-  const [agent, skill] = await Promise.all([
+test('source wiring requires the deterministic receipt writer and structural validator', async () => {
+  const [agent, skill, tool] = await Promise.all([
     readFile(path.join(testsDir, '..', '..', '..', 'agent.json'), 'utf8'),
     readFile(path.join(testsDir, '..', 'SKILL.md'), 'utf8'),
+    readFile(path.join(testsDir, '..', '..', '..', 'tools', 'contract-intake-deterministic-check', 'TOOL.md'), 'utf8'),
   ])
 
   assert.match(agent, /"StructuredFileValidate"/)
+  assert.match(agent, /"contract-intake-deterministic-check"/)
+  assert.doesNotMatch(agent, /"(?:Write|Edit|MathCalc)"/)
   assert.match(skill, /- StructuredFileValidate/)
+  assert.match(skill, /- contract-intake-deterministic-check/)
+  assert.doesNotMatch(skill, /- MathCalc/)
   assert.match(skill, /contract-intake-receipt\.schema\.json/)
   assert.match(skill, /没有独立 `intake\.yaml` 的路径、模板或数据契约/)
   assert.match(skill, /现有回执协议没有 `yaml_unverified` 或验证状态字段/)
   assert.match(skill, /第二次 `valid: false`、任何路径\/schema\/parser\/runtime/)
   assert.match(skill, /HOLD.*不调用 `Delegate` \/ `SendMessage`/)
   assert.match(skill, /不得把未验证或无效候选文件作为回执交付/)
-  assert.match(skill, /先前成功校验立即失效/)
+  assert.match(skill, /任何后续修改都会使先前成功校验失效，交付前必须再次 `Read`\s*并重新实际调用校验工具/)
   assert.match(skill, /逐字段精确镜像\s*比较/)
   assert.match(skill, /不能证明跨位置值相等/)
   assert.match(skill, /含页码、附件、占位或金额的正则模式传 `pattern` 加 `is_regex: true`/)
-  assert.match(skill, /用 `MathCalc` 校验实际出现的页码集合是否等于 `\{1\.\.M\}`/)
-  assert.match(skill, /MathCalc\(\{expression: "sum\(present_once_flags\) == declared_total and unexpected_page_count == 0".*mode: "bignumber", precision: 64, format: "auto"\}\)/s)
-  assert.match(skill, /用 `MathCalc` 与小写数值做\*\*精确\*\*比较/)
-  assert.match(skill, /MathCalc\(\{expression: "uppercase_value - lowercase_value".*mode: "bignumber", precision: 64, format: "auto"\}\)/s)
-  assert.match(skill, /缺少调用、调用失败或没有实际返回值时，该步不得写 `pass`/)
-  assert.match(skill, /不得用模型自述的 `called: true` 或新增回执字段补证/)
-  assert.match(skill, /严格串行执行：先 `Read` 本地回执 Schema，再 `Write` 候选回执，随后\s+`Read` 刚写入的同一路径，最后才调用 `StructuredFileValidate`/)
+  assert.match(skill, /S3 与 S7\.2 金额子检查必须只由 `contract-intake-deterministic-check` 对受权 source snapshots 的实际计算写入/)
+  assert.match(skill, /不得传入、复用或声称模型派生的页码\/金额 pass flags/)
+  assert.match(skill, /不得传入、复用或声称模型派生的页码\/金额 pass flags/)
+  assert.match(skill, /`MathCalc` 不是本 Agent 的证据路径/)
+  assert.match(skill, /先 `Read` 本地回执 Schema，再一次调用 `contract-intake-deterministic-check`.*原子 JSON 输出.*随后 `Read`.*StructuredFileValidate/s)
   assert.match(skill, /禁止并行、跳过回读或用结构校验代替 S1–S8 的真实执行/)
+  assert.match(tool, /^name: contract-intake-deterministic-check$/m)
+  assert.doesNotMatch(tool, /^version:/m)
+  const toolFrontmatter = parse(tool.slice(4, tool.indexOf('\n---', 4)))
+  assert.ok(toolFrontmatter.description.length <= 80)
+  assert.equal(toolFrontmatter.risk_level, 'low')
+  assert.equal(toolFrontmatter.metadata.version, '1.0.0')
+  assert.match(tool, /^risk_level: low$/m)
+  assert.match(tool, /^metadata:\n  author: DesireCore\n  version: "1\.0\.0"\n  provider_type: script$/m)
+  assert.match(tool, /runtime: node\n  command: s3-s7\.mjs\n  args: \[\]/)
+  assert.match(tool, /protocol: snapshot-v1/)
 })
 
 test('agent, Skill, and schema-valid fixture bind the same Intake release version', async () => {

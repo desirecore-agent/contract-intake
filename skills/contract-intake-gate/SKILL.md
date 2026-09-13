@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.7
+version: 1.0.8
 type: procedural
 risk_level: low
 status: enabled
@@ -26,14 +26,13 @@ requires:
     - Glob
     - FileDigest
     - Grep
-    - Write
-    - MathCalc
+    - contract-intake-deterministic-check
     - GenerateUUID
     - UnderstandImage
     - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.7
+  version: 1.0.8
   updated_at: '2026-09-13'
 ---
 
@@ -49,12 +48,8 @@ metadata:
 1. 先按 S1–S8 顺序执行本技能要求的实际读取、搜索和摘要工具；`Grep` 的正则模式必须传
    `is_regex: true`，逐字 quote 必须传 `is_regex: false`，不得混用。`FileDigest` 的单文件
    `paths` 与多文件 `paths_json` 形状严格按 S1 使用，不得互换。
-2. S3 对每个页码组必须实际调用 `MathCalc` 校验完整集合，S7 对每组成对金额必须实际调用
-   `MathCalc` 比较数值。缺少调用、调用失败或没有实际返回值时，该步不得写 `pass`；立即如实
-   `HOLD`，不得写最终 verdict、不得交接，也不得用模型自述的 `called: true` 或新增回执字段补证。
-3. 完成全部业务检查后，严格串行执行：先 `Read` 本地回执 Schema，再 `Write` 候选回执，随后
-   `Read` 刚写入的同一路径，最后才调用 `StructuredFileValidate`。任一步失败按下文规则 HOLD；
-   禁止并行、跳过回读或用结构校验代替 S1–S8 的真实执行。
+2. S3 与 S7.2 金额子检查必须只由 `contract-intake-deterministic-check` 对受权 source snapshots 的实际计算写入。不得传入、复用或声称模型派生的页码/金额 pass flags；工具失败、受限、源摘要不符或输出不合格时，立即如实 `HOLD`，不得写最终 verdict 或交接。`MathCalc` 不是本 Agent 的证据路径。
+3. 全部业务事实完成后，先 `Read` 本地回执 Schema，再一次调用 `contract-intake-deterministic-check`，让平台以原子 JSON 输出写入最终 receipt 路径；随后 `Read` 该同一路径，最后调用 `StructuredFileValidate({document_path, schema_path, format: "yaml"})`。任一步失败按下文规则 HOLD；禁止并行、跳过回读或用结构校验代替 S1–S8 的真实执行。
 
 ## 不可协商的前提
 
@@ -65,29 +60,27 @@ metadata:
 
 5. **结构化回执必须先保证 YAML 语法，再谈业务结论。** 本技能定义的机器消费产物是最终
    `contract_intake_receipt` 回执；没有独立 `intake.yaml` 的路径、模板或数据契约，不得凭空
-   新建、验证或交接第二份同数据产物。回执
-   只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
+   新建、验证或交接第二份同数据产物。回执可由确定性工具输出 JSON（JSON 是 YAML 的有效子集）；其他由 Agent 书写的 YAML 标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
    或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
    禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
 6. **回读与结构校验都必须有工具证据。** `Read` 只能证明文件内容已回读，不能证明 YAML
-   可解析。首次写入候选回执前，必须先对本技能目录中的
-   `references/contract-intake-receipt.schema.json` 实际调用 `Read`；该读取失败即如实 HOLD，不得写入候选
-   或交接。本技能随后必须在写入候选回执并 `Read` 后，实际调用一次
+   可解析。调用确定性工具前，必须先对本技能目录中的
+   `references/contract-intake-receipt.schema.json` 实际调用 `Read`；该读取失败即如实 HOLD，不得调用确定性工具生成最终回执
+   或交接。确定性工具原子写入最终回执并 `Read` 后，本技能必须实际调用一次
    `StructuredFileValidate({document_path: <最终回执绝对路径>, schema_path: <本技能目录>/references/contract-intake-receipt.schema.json, format: "yaml"})`。
    该调用仅验证 YAML 与本地 Draft-07 回执结构，不能证明跨文件一致性、法律结论、人类闸门、
    签章真实性或任何 Compose 保证，也不得把模型声称的 `valid`、工具 hash 或审计字段写入业务回执。
    现有回执协议没有 `yaml_unverified` 或验证状态字段；不得为了记录本次校验而向业务回执
    凭空增加字段。工具调用成功且返回 `valid: true` 后，才可把已校验的候选文件作为最终回执并按
-   既有 verdict 规则交接。`valid: false` 时只允许修正本 Agent 刚写入的候选回执一次；修正后必须重新 `Read` 并以相同
+   既有 verdict 规则交接。`valid: false` 时只允许修正确定性工具的 `receipt_base` 一次，并重新调用该工具、`Read` 同一路径及以相同
    路径、schema 路径和 `format: "yaml"` 重验。第二次 `valid: false`、任何路径/schema/parser/runtime
    工具错误或未获结果，均在本轮对话如实报告 `HOLD`、不调用 `Delegate` / `SendMessage` 向下游交接，
-   且不得把未验证或无效候选文件作为回执交付、不得伪造 `passed`、可信回执或 hash。验证成功后
-   不得再对该文件 `Write` / `Edit`；若确有后续写入，先前成功校验立即失效，交付前必须再次 `Read`
+   且不得把未验证或无效候选文件作为回执交付、不得伪造 `passed`、可信回执或 hash。验证成功后不得再修改该文件；任何后续修改都会使先前成功校验失效，交付前必须再次 `Read`
    并重新实际调用校验工具。此验证不改变 S1–S8、四大冻结、verdict、Human Gate
    与既有跨字段检查；这些业务检查仍必须在本 Agent 中完成。
    特别是 `unsigned_draft` 的回执与交接 `exception_basis` 必须继续按既有规则逐字段精确镜像
    比较；本地 Draft-07 只能校验两处各自的结构，不能证明跨位置值相等，不得将结构通过当作镜像通过。
-7. **写入前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
+7. **将 `receipt_base` 交给工具前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
    等自由文本逐个检查引号配对与缩进；无法安全编码时用块标量，不得为了省字删掉证据或改写
    原文。写入后再次 `Read`，保持 `input_file.absolute_path`、SHA 和所有门禁字段不变。
 
@@ -251,14 +244,7 @@ freeze:
    - 中文：`第 N 页 / 共 M 页`
    - 英文：`Page N of M`
 2. **按部件分组**。正文一段序列、每个附件各一段序列。
-3. 对每一组：
-   - 取声明总页数 `M`（组内 `M` 不唯一时 → `BLK-PAGE-TOTAL-CONFLICT`）
-   - 用 `MathCalc` 校验实际出现的页码集合是否等于 `{1..M}`。先依据 `Grep` 的逐条结果，按
-     `1..M` 构造长度恰为 `M` 的 `present_once_flags`：某页恰好出现一次为 `1`，缺失或重复为 `0`；
-     另记录范围外实际页号的 `unexpected_page_count`，再实际调用
-     `MathCalc({expression: "sum(present_once_flags) == declared_total and unexpected_page_count == 0", scope: {present_once_flags: [<按页序的 0/1>], declared_total: "<M>", unexpected_page_count: "<范围外页号数>"}, mode: "bignumber", precision: 64, format: "auto"})`。
-     只有工具成功返回精确 `true`，且逐条 Grep 结果没有 M 冲突时，才可通过本组；
-     不得心算、不得把参数或预期值当成工具结果。
+3. 将受权 source snapshots 与按摘要绑定的 `part` 映射交给确定性工具。工具以原始字节计算每组页码：组内总页数冲突、缺号、重复和范围外页号都必须按输出记录；不得把 Grep 摘要、模型心算或候选 pass 字段作为结果。只有工具输出连续集合时才可通过本组。
    - 缺号 → 记录缺失页列表；重号 → 记录重复页列表
 
 > ⚠️ 最容易误报的地方：一个文件里可能同时存在"正文 1–7 / 共 7 页"和"附件 1–2 / 共 2 页"两段序列。
@@ -739,11 +725,7 @@ blocks:
    - `人民币<大写>元整（¥<小写>）`
    - `<小写>元（大写：<大写>）`
    - `RMB <小写> (SAY <大写> ONLY)`
-2. 把中文大写逐字转成数值（`壹贰叁肆伍陆柒捌玖` / `拾佰仟萬万亿` / `零` / `角分`），
-   用 `MathCalc` 与小写数值做**精确**比较：对每一对金额，把原文大写金额规范化为精确十进制
-   字符串后，实际调用
-   `MathCalc({expression: "uppercase_value - lowercase_value", scope: {uppercase_value: "<大写规范值>", lowercase_value: "<小写原值>"}, mode: "bignumber", precision: 64, format: "auto"})`。
-   只有工具成功返回精确 `0` 才可判相等；调用缺失、失败或无返回值时不得自行比较或把 S7 写成 `pass`。
+2. 确定性工具以 BigInt 将受权 source snapshots 中的中文大写和阿拉伯金额转为精确 cents 后比较。只有工具输出精确相等才可判相等；工具缺失、失败、无输出、金额语法不确定或源格式不支持时，不得自行比较或把 S7 写成 `pass`，并如实 HOLD。
 3. 只在**成对**出现时比较。单独出现的大写金额或小写金额不参与本检查。
 
 **命中什么算失败**
@@ -900,7 +882,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 2. **不调用 `Delegate`，不调用 `SendMessage` 向下游成员发送材料。**
 3. **不输出条款清单、风险清单或任何形式的"完整审查结论"**，也不得附带"注意风险后可继续"的表述。
 4. 产出补齐清单 `remediation`：每条 = 缺什么 + 在哪一页 + 补成什么样，用祈使句。
-5. 回执照常落盘（拒绝也是一次正式受理，必须可回放）。
+5. 回执照常由确定性工具原子落盘（拒绝也是一次正式受理，必须可回放）。
 
 **结论为 `conditional` 时的强制动作**
 
@@ -925,7 +907,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 `lead_workspace` 只用于定位来源，不得据此自行切换到其他私有目录。若声明的
 `canonical_artifact_root` 恰覆盖上述成员命名空间，或规范化路径、既有目录链接使保留根关系无法确认，记录配置冲突并停止，不得写入保留根或改投其他位置。该成员命名空间只约定产物归属，不是额外安全沙箱；真实写入仍受平台路径授权约束，且不得调用 shell 做路径校验。旧回执**保留不覆盖**——规则更新后要靠它们做历史回放与差异对比。
 
-`Ls` 只确认 effective cwd 与路径事实，不要求新成员输出父目录预先存在；缺少该父目录不是 HOLD。完成既有 scope 校验后，直接对上述绝对 `receipt_path` 使用普通 `Write`，由其创建授权父目录；不得调用 Bash/mkdir，也不得循环 `Ls` 缺失的目标父目录。
+`Ls` 必须实际确认 effective cwd 与既有成员输出父目录；`output_path` 只能是该已存在受权目录内、由本次真实 `intake_id` 构成且尚不存在的唯一 `<intake_id>.receipt.yaml`。父目录缺失、路径已存在或平台返回的 output path 不等于请求的唯一目标时如实 HOLD，不得改投其他根。完成既有 scope 校验后，将该绝对 `receipt_path` 仅作为确定性工具的 `output_path` 参数；平台以受权 create-only 原子输出写入。不得调用 Bash/mkdir、普通 `Write` / `Edit`，也不得循环 `Ls` 猜测或创建目录。
 
 ### 回执完整结构
 
