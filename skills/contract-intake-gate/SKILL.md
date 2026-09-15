@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.4
+version: 1.0.5
 type: procedural
 risk_level: low
 status: enabled
@@ -31,8 +31,8 @@ requires:
     - UnderstandImage
 metadata:
   author: DesireCore
-  version: 1.0.4
-  updated_at: '2026-09-10'
+  version: 1.0.5
+  updated_at: '2026-09-15'
 ---
 
 # 合同输入治理闸门
@@ -393,6 +393,18 @@ blocks:
 2. 英文合同普遍不用印章，**不得因为没有"公章"字样就判缺签章**；英文合同的签章要素以
    `Signature` 有实际签署痕迹（手写名、`/s/ Name` 电子签形式）为准。
 3. 首部声明的 `execution_date_declared` 与落款 `Date` 不一致时，以**两者都必须有值且相等**为通过条件。
+
+### 已知未签署草稿的辅助审查例外
+
+当且仅当以下条件同时满足时，缺少落款、签名、职务、日期或印章字段不构成签章阻断：
+
+1. 本轮用户请求明确是草稿或谈判辅助审查，并明确不签署、不执行；
+2. 当前材料明确声明版本为未签署草稿（例如“谈判草稿（尚未签署）”或 `unsigned_draft`）；
+3. 材料没有已完成签署事实与草稿状态冲突，也没有要求验证签署权限、签章真实性或合同效力。
+
+满足例外时，S5 必须记录为 `pass`：冻结的是“当前版本已知未签署”的状态，而不是签章字段完整性。回执的 `freeze.execution_status` 使用 `frozen: true`、`signature_status: unsigned_draft`、`verification_status: not_performed`，每一方的 `seal_field: not_covered`、`evidence_level: known_unsigned_draft` 和来源锚点仍须完整记录；不得声称已签署、已生效或已验真。回执与交接必须同时写入 `review_purpose: draft_negotiation_assistance`，并逐字镜像本轮请求范围和材料原文的 `exception_basis.request_scope_evidence`、`exception_basis.material_evidence`。
+
+不满足任一条件时，继续按上表的 `BLK-SIGNATURE-*` 规则阻断；不能从“看起来像草稿”或单纯缺少落款反推 `unsigned_draft`。
 
 ### 签章证据级别（只描述已见证据）
 
