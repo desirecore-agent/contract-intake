@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.5
+version: 1.0.6
 type: procedural
 risk_level: low
 status: enabled
@@ -31,7 +31,7 @@ requires:
     - UnderstandImage
 metadata:
   author: DesireCore
-  version: 1.0.5
+  version: 1.0.6
   updated_at: '2026-09-15'
 ---
 
@@ -706,7 +706,15 @@ flags:
 3. 签署地点
 4. 各方注册地
 
-线索指向的法域与 `jurisdiction_pack_version` 的法域前缀不一致 → **阻断**。
+线索指向的法域与 `jurisdiction_pack_version` 的法域前缀不一致时，先区分“能力范围事实”和“材料自身缺陷”：
+
+- 团队声明仅服务一个法域，且线索明确落在该范围之外：记录
+  `SCOPE-JURISDICTION-OUT-OF-SCOPE`，将其放入 `pending`（`must_escalate: true`），**不阻断通用文档治理**。
+  下游必须透传“超出服务范围、转介熟悉该法域的专业人士”，不得把它改写成“补充规则包”，也不得输出该法域实体合规结论。
+- 团队声明支持该法域、但运行时加载了另一份可用规则包：这是能力配置错配，记录
+  `BLK-JURISDICTION-PACK-MISMATCH` 并阻断，切换正确规则包后重跑。
+
+只有第二种“本应能审但加载了错误规则包”的情况属于材料进入错误审查能力的阻断；第一种是可验证的服务范围边界，不能把本来可以交付的通用事实治理一并丢弃。
 线索完全不可得 → `FLG-JURISDICTION-UNDETERMINED`（结论至多 `conditional`，且必须在交接块里
 写明"法域未定，下游法域合规环节不得使用默认规则包"）。
 
@@ -717,7 +725,7 @@ flags:
 | 情形 | 记法 | 对 `verdict` 的影响 |
 |---|---|---|
 | 取到值且一致 | `aligned: true` | 无 |
-| 取到值但不一致 | `aligned: false` + `alignment_advice` | 按上表；**仅 `jurisdiction_pack_version` 不一致才阻断** |
+| 取到值但不一致 | `aligned: false` + `alignment_advice` | 按上表；仅“团队支持该法域却加载了错误规则包”阻断，超出单法域服务范围记 `SCOPE-*` 并交接 |
 | **取不到值** | `current: not_available` + `FLG-<DIM>-UNAVAILABLE` | **不影响 `verdict`**，写进交接块由覆盖矩阵留白 |
 
 理由：`server_version` / `knowledge_base_version` / `parser_revision` 在当前运行时
@@ -727,7 +735,7 @@ flags:
 
 **唯一例外**：`jurisdiction_pack_version` 取不到时仍按
 `FLG-JURISDICTION-UNDETERMINED` 处理（结论至多 `条件通过`），
-因为它直接决定下游能否出合规结论——那是对**审查能力**的判定，不是对合同的判定。
+因为它直接决定下游能否出合规结论——那是对**审查能力**的判定，不是对合同的判定。若线索同时落在团队声明范围之外，优先记录 `SCOPE-JURISDICTION-OUT-OF-SCOPE`，并把实体合规环节标成 `not_covered`，而不是伪造一个“缺包”阻断。
 
 **输出「数据对齐建议」而不是自动放行**
 
