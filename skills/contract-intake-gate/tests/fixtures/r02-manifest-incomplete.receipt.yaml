@@ -25,7 +25,7 @@ contract_intake_receipt:
     to: clause-extractor
     from: contract-intake
     intake_id: INTAKE-R02-MANIFEST-INCOMPLETE
-    receipt_path: C:/workspace/contract-review/R02/intake/INTAKE-R02-MANIFEST-INCOMPLETE.receipt.yaml
+    receipt_path: /workspace/contract-review/R02/intake/INTAKE-R02-MANIFEST-INCOMPLETE.receipt.yaml
     object:
       contract_object_id: R02-DEMO-2026-001
       object_title: R02 附件清单不完整合同

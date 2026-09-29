@@ -1,0 +1,21 @@
+schema_version: bounded-local-draft7-v1
+intake_id: INTAKE-SCHEMA-INVALID
+case_id: C-SCHEMA
+object:
+  object_id: OBJ-1
+  version: v1
+  source_path: relative/example.md
+  digest_status: verified
+verdict: pass
+checks: []
+blocks: []
+flags: []
+scope_facts: []
+capability_status: ready
+serialization_status: valid
+handoff:
+  to: contract-review-lead
+  from: contract-intake
+  confirmed: []
+  pending: []
+  scope: {}

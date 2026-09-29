@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.6
+version: 1.0.7
 type: procedural
 risk_level: low
 status: enabled
@@ -29,18 +29,22 @@ requires:
     - MathCalc
     - GenerateUUID
     - UnderstandImage
+    - FileDigest
+    - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.6
+  version: 1.0.7
   updated_at: '2026-09-15'
+  pipeline_stage: O1
+  upstream: contract-review-lead
+  downstream: [contract-review-lead]
 ---
 
 # 合同输入治理闸门
 
 ## 何时使用
 
-收到任何待审查的合同材料时**第一个**执行本技能。下游的条款抽取、风险识别、法域合规、
-复核出报告四个环节，只有在本技能给出 `通过` 或 `条件通过` 后才允许启动。
+收到 Lead 登记并指定的合同对象时执行 O1。本技能不自行启动 O2/O3/O4/O5；只有有效的 `通过` 或 `条件通过` 回执可交回 Lead 继续编排。
 
 ## 不可协商的前提
 
@@ -53,11 +57,7 @@ metadata:
    只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
    或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
    禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
-6. **回读声明必须有工具证据。** `Read` 只能证明文件内容已回读，不能证明 YAML 可解析。
-   本 Agent 的工具权限没有 YAML 解析器时，必须明确写“已回读，语法未由解析器验证”，不得
-   声称“YAML 可解析/通过 safe_load”；应在回执中保留待外部验证标记 `yaml_unverified`，并
-   将受影响结论降为 `conditional`，不得发送 `passed`。若未来环境提供专用 YAML 校验工具，
-   只有该工具返回成功后才可移除 `yaml_unverified`。
+6. **回读与结构校验必须有工具证据。** `Read` 只证明文件已回读；再用只读 `StructuredFileValidate` 按本地 schema 校验同一字节，并核对 document/schema SHA-256。工具失败属于 capability/serialization debt，不伪装成合同 FLG 或自动把合同 verdict 降为 conditional；无有效机器回执时 `handoff.to=null`，由 Lead 决定重试，O2 不启动。
 7. **写入前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
    等自由文本逐个检查引号配对与缩进；无法安全编码时用块标量，不得为了省字删掉证据或改写
    原文。写入后再次 `Read`，保持 `input_file.absolute_path`、SHA 和所有门禁字段不变。
@@ -601,6 +601,14 @@ blocks:
 
 本步包含两个独立子检查，都属于"文档内部自相矛盾"这一类。
 
+### 角色适用性先于识别号缺失判定
+
+逐主体建立 `party_assessments[]`，保留 `party_id`、`party_role`、原文角色来源 `role_source`、`identifier_applicability`、`identifier_status` 与 `basis`。`party_role` 仅从材料确定为 buyer、seller、employer、employee、provider、customer、witness、guarantor、other 或 unknown；角色未知不能猜作主合同当事方。
+
+先判断识别号对该主体是否为 `required`、`not_applicable` 或 `unknown`，再判断状态为 `present`、`missing`、`redacted` 或 `unknown`。主合同当事方也不能仅凭角色认定某一特定识别号必需，必须记载材料、对象类型及本次范围的依据。自然人、见证人、境外主体不得机械套用大陆法人信用代码要求。`not_applicable` 不填 `identifier_value`，状态为 unknown 或 redacted，并记录不适用依据；它不是“已提供”。`present` 必须记录原文真实值。未知适用性记明待确认事实，不按缺失或通过处理。
+
+仅在适用性已确认 required、实际检索后仍 missing 时，记 `FLG-PARTY-ID-ABSENT`，S7 为 flag，保留检索范围、检索词与补料动作，并使 flags/verdict 一致；如同时有其他 BLK，blocked 优先。脱敏掩码不等同缺失，不为通过校验补写号码。下列名称一致性、合法简称和金额规则仍须分别执行。
+
 ### S7.1 主体身份一致性
 
 **怎么检**
@@ -622,7 +630,7 @@ blocks:
 | 出现与权威名称不同、且未定义为简称的主体名称 | `BLK-PARTY-INCONSISTENT` |
 | 同一主体在不同条款被指为不同角色 | `BLK-PARTY-ROLE-CONFLICT` |
 | 首部已定义简称（如"以下简称'服务商'"）且全文使用一致 | `pass`，**不得报错** |
-| 统一社会信用代码缺失 | `FLG-PARTY-ID-ABSENT` |
+| `identifier_applicability: required` 且实查为 `identifier_status: missing` | `FLG-PARTY-ID-ABSENT`；不适用或未知不得套用此行 |
 
 > ⚠️ 最容易误报的地方：合法简称。首部写了"（以下简称'乙方'）"或"（以下简称'服务商'）"的，
 > 全文使用该简称是**正确**的，不是不一致。校验前先建立"权威名称 → 已定义简称"映射表。
@@ -777,7 +785,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 
 ```
 存在任一 BLK-*                              → blocked      拒绝
-无 BLK-*，存在任一 FLG-*                    → conditional  条件通过
+无 BLK-*，存在门禁型 FLG-*                  → conditional  条件通过
 无 BLK-*，无 FLG-*，四大冻结全部 frozen      → passed       通过
 ```
 
@@ -799,12 +807,12 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 其中 R9 必须严格使用 `PEND-001` 和 `must_escalate: true`。`verdict: blocked` 时
 `handoff.to` 必须为 `null`，即使同时存在 `FLG-*` 也不得交接。
 
-### 三态各自的下游语义（不可混淆）
+### 三态交回 Lead 后的语义（不可混淆）
 
 | verdict | 流水线动作 | 常见误判 |
 |---|---|---|
-| `passed` | 正常交接，下游全量执行 | 因 `SCOPE-*` 误降为 `conditional` |
-| `conditional` | **照常交接、照常全量执行下游**，只是带着 `pending` 项 | 误当成"暂停"或"部分执行"而中断流水线 —— **这同样是失败** |
+| `passed` | 正常交回 Lead，由 Lead 继续 O2–O5 | 因 `SCOPE-*` 误降为 `conditional` |
+| `conditional` | **照常交回 Lead**并携带 `pending`，由 Lead 保持后续范围 | 误当成"暂停"或"部分执行"而中断流水线 —— **这同样是失败** |
 | `blocked` | **终止**，不交接、不输出条款清单与风险清单 | 输出"注意上述风险后继续审查"并给出完整结论 —— **等同于没有阻断，判失败** |
 
 > ⚠️ `conditional` **不是**弱化版的 `blocked`。它的语义是"带标继续"。
@@ -820,7 +828,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 
 **结论为 `conditional` 时的强制动作**
 
-1. 照常交接给下游，`handoff.to` 正常填写。
+1. 照常交回 Lead，`handoff.to: contract-review-lead`。
 2. 每条 `FLG-*` 都进 `handoff.pending`，写清 `required_downstream_action`。
 3. **不得**以任何形式暂停或缩减下游范围。
 
@@ -831,14 +839,21 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 ### 落盘位置
 
 ```
-<有效工作目录>/contract-review/<contract_object_id>/intake/<intake_id>.receipt.yaml
+<canonical_artifact_root>/intake/<intake_id>.receipt.yaml
 ```
 
-`<有效工作目录>` 取当前会话的工作目录，**用 `Ls` 实际确认后使用绝对路径**，
-不要在提示词或产物里写死任何用户主目录字面量。旧回执**保留不覆盖**——
+`canonical_artifact_root` 由 Lead 明确提供，不从 cwd 猜测，也不重复拼接案件根目录；使用 Write 实际返回的绝对路径并 Read 回读。旧回执**保留不覆盖**——
 规则更新后要靠它们做历史回放与差异对比。
 
-### 回执完整结构
+### 机器回执与详细事实必须分别可读取
+
+`<intake_id>.receipt.yaml` 是唯一机器交接回执：先读取本技能 `schemas/intake-receipt.schema.json`，严格采用其扁平顶层结构，不再用下面详细事实示例的 `contract_intake_receipt` 外包层。必需字段是 schema_version、intake_id、case_id、object、verdict、party_assessments、freeze、conclusions、checks、blocks、flags、scope_facts、capability_status、serialization_status、handoff。object 采用 object_id/version/source_path/digest_status 以及实际可得的完整 sha256；冻结键使用 main_version/attachment_manifest/pagination/execution_status，各含 frozen/source_scope/basis。conclusions 显式记录两个 allowed 值；不可从 schema 有效推导业务结论。
+
+详细原文、签章证据、四元组、版本矩阵、补料动作及下列详细结构写入同目录新建的 `<intake_id>.detail.yaml`，不以机器接口的简化字段替代业务知识。Lead 必须收到两份文件的实际绝对路径。机器 finding.id 对应详细 finding.code；source_scope 保留详细记录的实际文件、页段或行号，action 保留原纠正动作；有原文时填 quote，缺失项填真实 search_patterns，不同时伪造两者。S1–S8 的 source_scope/action 不能用固定样例代替实际检查。
+
+机器文件完成后 Write→Read→StructuredFileValidate，真实参数为 document_path、schema_path、format。读取校验工具结果，只有 `valid:true` 才可继续按 verdict 判断是否交接；工具 success 不代表 valid 为真。另写 `<intake_id>.validation.json` sidecar，不自引用，也不回写受校验文件以制造新摘要；保存工具实际 document/schema/report 摘要和诊断。原机器文件的 serialization_status 不是有效性的自我证明。校验失败保留文件与诊断，给 Lead 返回失败状态及路径，不启动下游、不把工具失败改成合同 conditional。重新生成必须使用新 intake_id，再完整校验。
+
+### 详细事实结构（业务记录示意，不是机器回执模板）
 
 ```yaml
 contract_intake_receipt:
@@ -925,7 +940,7 @@ contract_intake_receipt:
 
 ```yaml
 handoff:
-  to: clause-extractor                  # verdict 为 blocked 时必须为 null
+  to: contract-review-lead              # verdict 为 blocked 或机器回执无效时必须为 null
   from: contract-intake
   intake_id: INTAKE-20260331-7f3a2c9b
   receipt_path: /abs/path/.../INTAKE-20260331-7f3a2c9b.receipt.yaml
@@ -936,7 +951,7 @@ handoff:
     submission_mode: version_comparison
     versions: [C06a-saas-v1, C06b-saas-v2]
 
-  confirmed:                            # 已确认事项（下游可直接当作事实使用）
+  confirmed:                            # 有来源的事实候选；后续成员仍须回源
     - 主版本已冻结：合同编号 YCIT-SAAS-2025-0206，正文共 7 页，页码 1–7 连续
     - 附件清单已冻结：附件一 V1.0、附件二 SLA-v1.2、附件三 V1.0，编号与名称在正文引用中一致
     - 签章字段已冻结：双方文本声明的公章 + 授权代表签字 + 职务 + 签署日期 2025-11-03 齐备（declared_in_text；未做图像或电子签真实性验证）
@@ -978,12 +993,13 @@ handoff:
     - 任何未经 evidence 锚定的判断
 ```
 
-**交接方式**：用 `Delegate`（`mode: sync`）把上面的 YAML 块作为 `context` 传给
-`handoff.to`。引用的所有文件必须写**绝对路径**——下游 Agent 的工作目录与你不同。
+**交接方式**：只返回 Lead 可读取的回执绝对路径与上述 handoff；本成员不调用 Delegate 或 SendMessage，不自行启动 O2–O5。引用的所有文件必须写**绝对路径**。
 
 ---
 
 ## 自检清单（出具回执前逐条确认）
+
+收到任何补料、替换页、附件、澄清或新版本后，必须生成新的 `intake_id` 并从 S1 到 S8 全量重跑；旧回执保留，不得覆盖、拼接或作为新材料的通过证明。
 
 **完整性**
 
@@ -1034,3 +1050,5 @@ handoff:
 
 - [ ] 回执落盘用的是实际确认过的绝对路径，没有写死用户主目录字面量
 - [ ] 旧回执未被覆盖，本次是新的 `intake_id`
+
+---
