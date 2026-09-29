@@ -55,7 +55,8 @@
       },
       "allOf": [
         {"if": {"properties": {"identifier_status": {"const": "present"}}, "required": ["identifier_status"]}, "then": {"required": ["identifier_value"]}},
-        {"if": {"properties": {"identifier_applicability": {"const": "not_applicable"}}, "required": ["identifier_applicability"]}, "then": {"properties": {"identifier_status": {"enum": ["unknown", "redacted"]}}, "not": {"required": ["identifier_value"]}}}
+        {"if": {"properties": {"identifier_applicability": {"const": "required"}}, "required": ["identifier_applicability"]}, "then": {"properties": {"identifier_status": {"enum": ["present", "missing", "redacted"]}}}},
+        {"if": {"properties": {"identifier_applicability": {"enum": ["not_applicable", "unknown"]}}, "required": ["identifier_applicability"]}, "then": {"properties": {"identifier_status": {"const": "unknown"}}, "not": {"required": ["identifier_value"]}}}
       ]
     },
     "freeze_item": {
@@ -78,7 +79,7 @@
       "properties": {
         "object_id": {"type": "string", "minLength": 1},
         "version": {"type": "string", "minLength": 1},
-        "source_path": {"type": "string", "pattern": "^/"},
+        "source_path": {"type": "string", "pattern": "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\[^\\\\])"},
         "digest_status": {"enum": ["verified", "frozen_without_digest"]},
         "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
       },

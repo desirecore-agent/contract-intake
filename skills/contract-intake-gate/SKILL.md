@@ -607,7 +607,7 @@ blocks:
 
 先判断识别号对该主体是否为 `required`、`not_applicable` 或 `unknown`，再判断状态为 `present`、`missing`、`redacted` 或 `unknown`。主合同当事方也不能仅凭角色认定某一特定识别号必需，必须记载材料、对象类型及本次范围的依据。自然人、见证人、境外主体不得机械套用大陆法人信用代码要求。`not_applicable` 不填 `identifier_value`，状态为 unknown 或 redacted，并记录不适用依据；它不是“已提供”。`present` 必须记录原文真实值。未知适用性记明待确认事实，不按缺失或通过处理。
 
-仅在适用性已确认 required、实际检索后仍 missing 时，记 `FLG-PARTY-ID-ABSENT`，S7 为 flag，保留检索范围、检索词与补料动作，并使 flags/verdict 一致；如同时有其他 BLK，blocked 优先。脱敏掩码不等同缺失，不为通过校验补写号码。下列名称一致性、合法简称和金额规则仍须分别执行。
+仅在适用性已确认 `required`、实际检索后仍 `missing` 时，记 `FLG-PARTY-ID-ABSENT`，S7 为 flag，保留检索范围、检索词与补料动作，并使 flags/verdict 一致；如同时有其他 BLK，blocked 优先。`required` 的状态只可为 present/missing/redacted；`not_applicable` 表示该角色经来源确认不承担本门禁要求，`unknown` 表示角色或适用规则仍无法确认，后二者的 identifier_status 均保持 unknown 且不得携带臆造号码。脱敏掩码不等同缺失：只有已确认 required 时才记 redacted；不为通过校验补写号码。下列名称一致性、合法简称和金额规则仍须分别执行。
 
 ### S7.1 主体身份一致性
 
@@ -840,9 +840,11 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 
 ```
 <canonical_artifact_root>/intake/<intake_id>.receipt.yaml
+<canonical_artifact_root>/intake/<intake_id>.detail.yaml
+<canonical_artifact_root>/intake/<intake_id>.validation.json
 ```
 
-`canonical_artifact_root` 由 Lead 明确提供，不从 cwd 猜测，也不重复拼接案件根目录；使用 Write 实际返回的绝对路径并 Read 回读。旧回执**保留不覆盖**——
+`canonical_artifact_root` 由 Lead 明确提供，不从 cwd 猜测，也不重复拼接案件根目录；POSIX 路径、Windows 盘符路径或 UNC 路径均以运行环境实际返回的绝对路径为准，相对路径一律拒绝。使用 Write 实际返回的绝对路径并 Read 回读。旧回执**保留不覆盖**——
 规则更新后要靠它们做历史回放与差异对比。
 
 ### 机器回执与详细事实必须分别可读取
@@ -851,7 +853,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 
 详细原文、签章证据、四元组、版本矩阵、补料动作及下列详细结构写入同目录新建的 `<intake_id>.detail.yaml`，不以机器接口的简化字段替代业务知识。Lead 必须收到两份文件的实际绝对路径。机器 finding.id 对应详细 finding.code；source_scope 保留详细记录的实际文件、页段或行号，action 保留原纠正动作；有原文时填 quote，缺失项填真实 search_patterns，不同时伪造两者。S1–S8 的 source_scope/action 不能用固定样例代替实际检查。
 
-机器文件完成后 Write→Read→StructuredFileValidate，真实参数为 document_path、schema_path、format。读取校验工具结果，只有 `valid:true` 才可继续按 verdict 判断是否交接；工具 success 不代表 valid 为真。另写 `<intake_id>.validation.json` sidecar，不自引用，也不回写受校验文件以制造新摘要；保存工具实际 document/schema/report 摘要和诊断。原机器文件的 serialization_status 不是有效性的自我证明。校验失败保留文件与诊断，给 Lead 返回失败状态及路径，不启动下游、不把工具失败改成合同 conditional。重新生成必须使用新 intake_id，再完整校验。
+机器文件完成后 Write→完整 Read→StructuredFileValidate，真实参数为 document_path、schema_path、format。对完整回读字节和完整 schema 字节分别计算 SHA-256，必须与真实工具报告的 `document_sha256`、`schema_sha256` 完全一致，并记录工具报告的 `report_sha256`；任何不一致均失败关闭并保留诊断。只有工具调用 `success:true`、报告结构完整、摘要绑定且报告 `valid:true` 才可继续按 verdict 判断交接；`success:false` 与 `valid:false` 是不同失败类别。另写 `<intake_id>.validation.json` sidecar，不自引用，也不回写受校验文件；固定记录 `sidecar_version`、`intake_id`、document 的实际绝对 `path`/`sha256`/`format`、schema 的实际绝对 `path`/`sha256`、`tool_success`、`validator_report_sha256`、`schema_valid` 与 `diagnostics`，不得复制业务 `verdict`。sidecar 只是基于受信工具返回的审计记录，不是工具来源、有效性的自签或自主授权。原机器文件的 serialization_status 也不是有效性的自我证明。校验失败保留文件与诊断，给 Lead 返回失败状态及路径，不启动下游、不把工具失败改成合同 conditional。重新生成必须使用非空新 intake_id 和规范化后不同的新 run 根，再完整校验；旧 receipt 的完整摘要作为前序引用且必须精确匹配，原文件字节不动。
 
 ### 详细事实结构（业务记录示意，不是机器回执模板）
 
