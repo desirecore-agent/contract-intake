@@ -7,6 +7,8 @@ import { parse } from 'yaml'
 
 const testsDir = path.dirname(fileURLToPath(import.meta.url))
 const fixture = async (name) => parse(await readFile(path.join(testsDir, 'fixtures', name), 'utf8'))
+// 回执可能在 Windows 或 POSIX 宿主上生成；两种绝对路径都合法，不能用宿主平台的 path.isAbsolute 判。
+const isAbsolutePath = (value) => path.posix.isAbsolute(value) || path.win32.isAbsolute(value)
 
 function assertSignatureEvidenceContract(receipt) {
   const execution = receipt.freeze.execution_status
@@ -18,7 +20,7 @@ function assertSignatureEvidenceContract(receipt) {
     assert.equal(party.verification_status, 'not_performed')
     assert.equal(party.seal, undefined, 'a text or image observation must not claim seal: present')
     assert.ok(party.seal_evidence, 'every S5 evidence level needs a source anchor')
-    assert.equal(path.isAbsolute(party.seal_evidence.input_path), true, 'S5 evidence path must be absolute')
+    assert.equal(isAbsolutePath(party.seal_evidence.input_path), true, 'S5 evidence path must be absolute')
     assert.equal(Number.isInteger(party.seal_evidence.page) || Number.isInteger(party.seal_evidence.image_index), true, 'S5 evidence needs a page or image index')
     assert.equal(typeof party.seal_evidence.locator, 'string', 'S5 evidence needs a locator')
     assert.equal(party.seal_evidence.locator.length > 0, true, 'S5 evidence locator must not be empty')
@@ -53,7 +55,7 @@ test('R02-like incomplete manifest is conditional, escalated, and handed off', a
   assert.equal(handoff.to, 'clause-extractor')
   assert.equal(handoff.from, 'contract-intake')
   assert.equal(handoff.intake_id, receipt.intake_id)
-  assert.equal(path.isAbsolute(handoff.receipt_path), true)
+  assert.equal(isAbsolutePath(handoff.receipt_path), true)
   assert.equal(typeof handoff.object.contract_object_id, 'string')
   assert.equal(handoff.object.contract_object_id.length > 0, true)
   assert.equal(Array.isArray(handoff.scope.in_scope), true)
@@ -130,7 +132,7 @@ test('text-declared signature fields can pass S5 without claiming authenticity v
   assert.equal(party.complete, true)
   assert.equal(party.evidence_level, 'declared_in_text')
   assert.equal(party.seal_field, 'declared_in_text')
-  assert.equal(path.isAbsolute(party.seal_evidence.input_path), true)
+  assert.equal(isAbsolutePath(party.seal_evidence.input_path), true)
   assert.equal(s5?.status, 'pass')
   assert.match(s5?.finding ?? '', /declared_in_text/)
   assert.match(s5?.finding ?? '', /未做图像或电子签真实性验证/)

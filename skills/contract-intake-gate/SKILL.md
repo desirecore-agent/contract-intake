@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.6
+version: 1.0.7
 type: procedural
 risk_level: low
 status: enabled
@@ -31,7 +31,7 @@ requires:
     - UnderstandImage
 metadata:
   author: DesireCore
-  version: 1.0.6
+  version: 1.0.7
   updated_at: '2026-09-15'
 ---
 
@@ -53,11 +53,34 @@ metadata:
    只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
    或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
    禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
-6. **回读声明必须有工具证据。** `Read` 只能证明文件内容已回读，不能证明 YAML 可解析。
-   本 Agent 的工具权限没有 YAML 解析器时，必须明确写“已回读，语法未由解析器验证”，不得
-   声称“YAML 可解析/通过 safe_load”；应在回执中保留待外部验证标记 `yaml_unverified`，并
-   将受影响结论降为 `conditional`，不得发送 `passed`。若未来环境提供专用 YAML 校验工具，
-   只有该工具返回成功后才可移除 `yaml_unverified`。
+6. **YAML 语法由 `StructuredFileValidate` 验证，回读不算数。** `Read` 只能证明文件内容已回读，
+   不能证明 YAML 可解析。每写完一个机器消费的 YAML 产物（正式回执、编排官要求的 `intake.yaml`
+   摘要等），立即调用：
+
+   ```
+   StructuredFileValidate
+     document_path: <该文件的绝对路径>
+     schema_path:   ${SKILL_DIR}/schemas/intake-receipt.schema.json
+     format:        yaml
+   ```
+
+   `${SKILL_DIR}` 由 Skill 工具替换为本技能目录的绝对路径。这份 Schema 只校验语法与门禁字段
+   （三态字面量、标签对应、blocked 不交接、pending 条目形状），不替代本技能的业务判据。
+
+   - 返回 `valid: true`：语法已由解析器验证，**不写** `yaml_unverified`，结论照常按判定表出具。
+   - 报解析失败或 `valid: false`：按返回的诊断修正后重写，再次校验，最多三轮。最常见的原因是
+     自由文本里未加引号的冒号，例如 `quote: yaml_unverified: true`——按第 5 条改用单引号或块标量。
+   - 工具不可用（不在工具清单、授权被拒、读不到 Schema）或三轮后仍未通过：才退回兜底做法——
+     写明“已回读，语法未由解析器验证”，在产物中保留 `yaml_unverified: true`，并将受影响结论
+     降为 `conditional`，不得发送 `passed`。
+
+   没有校验工具的成功返回，不得声称“YAML 可解析/通过 safe_load”。校验结果（`valid` 与
+   `report_sha256`）写进给编排官的交接回复，**不回写进已校验的文件**——回写会改变文件内容，
+   使刚才的校验结论失效。
+
+   > 2026-09-29 实测：没有校验工具时，这条兜底让 C01（只有范围事实、本应 `passed`）被降为
+   > `conditional`；而那一轮写出的 `intake.yaml` 恰好就在第 164 行因未加引号的冒号解析失败。
+   > 兜底既拿不到 `passed`，也没拦住真正的语法错误——两者都要靠真的去解析。
 7. **写入前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
    等自由文本逐个检查引号配对与缩进；无法安全编码时用块标量，不得为了省字删掉证据或改写
    原文。写入后再次 `Read`，保持 `input_file.absolute_path`、SHA 和所有门禁字段不变。
@@ -777,8 +800,8 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 
 ```
 存在任一 BLK-*                              → blocked      拒绝
-无 BLK-*，存在任一 FLG-*                    → conditional  条件通过
-无 BLK-*，无 FLG-*，四大冻结全部 frozen      → passed       通过
+无 BLK-*，存在任一影响结论的 FLG-*          → conditional  条件通过
+无 BLK-*，无影响结论的 FLG-*，四大冻结全部 frozen → passed   通过
 ```
 
 `verdict` 字段写机器值（`passed` / `conditional` / `blocked`），`verdict_label` 必须分别写
@@ -794,7 +817,14 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` 明确解释附件清单冻结缺口；不得再附加
 `FLG-FREEZE-INCOMPLETE` 或为它生成第二条 pending。
 
-**跨字段一致性检查（出具前必须执行）**：`verdict: passed` 时不得留下任何 `FLG-*`；
+**「影响结论的 FLG-\*」**指除 S8 版本维度「取不到值」标记之外的全部 `FLG-*`。
+这四类标记——`FLG-SKILL-VERSION-UNAVAILABLE`、`FLG-SERVER-VERSION-UNAVAILABLE`、
+`FLG-KNOWLEDGE-BASE-VERSION-UNAVAILABLE`、`FLG-PARSER-REVISION-UNAVAILABLE`——只表示
+覆盖缺口，S8 已规定它们**不影响 `verdict`**，可以与 `passed` 并存。不单列出来，判定表会
+把它们算进「存在任一 FLG-\*」，而 `server_version`、`parser_revision` 在当前运行时恒为
+取不到值，`passed` 就永远拿不到。`FLG-JURISDICTION-UNDETERMINED` 不在此列，结论至多 `conditional`。
+
+**跨字段一致性检查（出具前必须执行）**：`verdict: passed` 时不得留下任何影响结论的 `FLG-*`；
 `verdict: conditional` 时每条影响结论的 `FLG-*` 都必须有匹配的 `handoff.pending`；
 其中 R9 必须严格使用 `PEND-001` 和 `must_escalate: true`。`verdict: blocked` 时
 `handoff.to` 必须为 `null`，即使同时存在 `FLG-*` 也不得交接。
@@ -821,7 +851,7 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 **结论为 `conditional` 时的强制动作**
 
 1. 照常交接给下游，`handoff.to` 正常填写。
-2. 每条 `FLG-*` 都进 `handoff.pending`，写清 `required_downstream_action`。
+2. 每条影响结论的 `FLG-*` 都进 `handoff.pending`，写清 `required_downstream_action`。
 3. **不得**以任何形式暂停或缩减下游范围。
 
 ---

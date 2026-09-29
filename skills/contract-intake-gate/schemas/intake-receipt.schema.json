@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "合同输入治理产物（回执与摘要文件）",
+  "description": "contract-intake 写出的 YAML 产物的机器校验 Schema，供 StructuredFileValidate（format: yaml）使用。它回答两个问题：文件能否被 YAML 解析器读懂；下游机器消费的门禁字段是否取自合法词表且互相一致。它不重复 SKILL.md 的业务判据（四元组是否完整、证据是否准确），那些仍由技能正文约束。顶层键 contract_intake_receipt 按正式回执全量校验；编排官约定的其他文件（如 intake.yaml 摘要）顶层键可以不同、格式自由，只校验结论词表与标签对应。",
+  "type": "object",
+  "minProperties": 1,
+  "properties": {
+    "contract_intake_receipt": {
+      "description": "正式回执：落盘在 <有效工作目录>/contract-review/<contract_object_id>/intake/<intake_id>.receipt.yaml。",
+      "allOf": [
+        { "$ref": "#/definitions/receiptFields" },
+        { "required": ["verdict", "verdict_label", "handoff"] }
+      ]
+    }
+  },
+  "additionalProperties": {
+    "description": "其他顶层键（如编排官要求的 intake.yaml 摘要）。格式自由，不强制出现门禁字段；出现 verdict / verdict_label 时必须合法且互相对应。",
+    "allOf": [{ "$ref": "#/definitions/verdictFields" }]
+  },
+  "definitions": {
+    "verdictFields": {
+      "type": "object",
+      "properties": {
+        "verdict": {
+          "description": "门禁三态机器值，只有这三个字面量（团队 rules.md 第三之一节）。",
+          "enum": ["passed", "conditional", "blocked"]
+        },
+        "verdict_label": {
+          "description": "结论中文标签，必须与 verdict 一一对应。",
+          "enum": ["通过", "条件通过", "拒绝"]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["verdict"], "properties": { "verdict": { "const": "passed" } } },
+          "then": { "properties": { "verdict_label": { "const": "通过" } } }
+        },
+        {
+          "if": { "required": ["verdict"], "properties": { "verdict": { "const": "conditional" } } },
+          "then": { "properties": { "verdict_label": { "const": "条件通过" } } }
+        },
+        {
+          "if": { "required": ["verdict"], "properties": { "verdict": { "const": "blocked" } } },
+          "then": { "properties": { "verdict_label": { "const": "拒绝" } } }
+        }
+      ]
+    },
+    "receiptFields": {
+      "allOf": [
+        { "$ref": "#/definitions/verdictFields" },
+        {
+          "properties": {
+            "blocks": {
+              "description": "阻断项。存在任一条时 verdict 只能是 blocked。",
+              "type": "array",
+              "items": { "$ref": "#/definitions/finding" }
+            },
+            "flags": {
+              "description": "失败标记。",
+              "type": "array",
+              "items": { "$ref": "#/definitions/finding" }
+            },
+            "handoff": { "$ref": "#/definitions/handoff" }
+          }
+        },
+        {
+          "description": "blocked：不得交接（handoff.to 为 null）。",
+          "if": { "required": ["verdict"], "properties": { "verdict": { "const": "blocked" } } },
+          "then": { "properties": { "handoff": { "properties": { "to": { "type": "null" } } } } }
+        },
+        {
+          "description": "conditional：照常交接，不得有阻断项。",
+          "if": { "required": ["verdict"], "properties": { "verdict": { "const": "conditional" } } },
+          "then": {
+            "properties": {
+              "blocks": { "maxItems": 0 },
+              "handoff": { "properties": { "to": { "type": "string", "minLength": 1 } } }
+            }
+          }
+        },
+        {
+          "description": "passed：照常交接，不得有阻断项；flags 只允许 S8 版本维度「取不到值」标记（它们不影响 verdict）。",
+          "if": { "required": ["verdict"], "properties": { "verdict": { "const": "passed" } } },
+          "then": {
+            "properties": {
+              "blocks": { "maxItems": 0 },
+              "flags": {
+                "items": {
+                  "properties": { "code": { "$ref": "#/definitions/versionUnavailableCode" } }
+                }
+              },
+              "handoff": { "properties": { "to": { "type": "string", "minLength": 1 } } }
+            }
+          }
+        }
+      ]
+    },
+    "finding": {
+      "description": "一条 BLK-* / FLG-* 判定。完整四元组由 SKILL.md 约束，这里只校验机器会读的编码与等级。",
+      "type": "object",
+      "required": ["code", "severity"],
+      "properties": {
+        "code": {
+          "description": "内部判定编码，BLK- 或 FLG- 开头，大写字母、数字与连字符。",
+          "type": "string",
+          "pattern": "^(BLK|FLG)-[A-Z0-9]+(-[A-Z0-9]+)*$"
+        },
+        "gate_reason_id": {
+          "description": "对外统一 id；表外编码写 null。",
+          "type": ["string", "null"]
+        },
+        "severity": {
+          "description": "结论等级：block 对应 BLK-*，flag 对应 FLG-*。",
+          "enum": ["block", "flag"]
+        }
+      }
+    },
+    "versionUnavailableCode": {
+      "description": "S8 版本矩阵中「取不到值」的覆盖缺口标记。jurisdiction_pack_version 不在此列——它取不到时记 FLG-JURISDICTION-UNDETERMINED，结论至多 conditional。",
+      "enum": [
+        "FLG-SKILL-VERSION-UNAVAILABLE",
+        "FLG-SERVER-VERSION-UNAVAILABLE",
+        "FLG-KNOWLEDGE-BASE-VERSION-UNAVAILABLE",
+        "FLG-PARSER-REVISION-UNAVAILABLE"
+      ]
+    },
+    "handoff": {
+      "description": "结构化交接块（团队 rules.md 第三节）。",
+      "type": "object",
+      "required": ["to"],
+      "properties": {
+        "to": {
+          "description": "下游成员 ID；blocked 时必须为 null。",
+          "type": ["string", "null"]
+        },
+        "pending": {
+          "description": "待确认项。must_escalate 为 true 的条目必须逐条透传到最终报告。",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "from_flag", "must_escalate"],
+            "properties": {
+              "id": { "description": "待办编号，如 PEND-001。", "type": "string", "pattern": "^PEND-[0-9]+$" },
+              "from_flag": { "description": "来源判定编码（FLG-* 或 SCOPE-*）。", "type": "string", "minLength": 1 },
+              "must_escalate": { "description": "是否必须升级到最终报告。", "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
