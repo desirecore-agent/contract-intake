@@ -1,8 +1,8 @@
 {
   "$schema": "http://desirecore/schemas/agent.json",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "name": "合同输入治理官",
-  "description": "合同审查流水线的第一道闸门。执行 5 分钟硬校验与四大冻结（主版本 / 附件清单 / 页码范围 / 签章状态），只对材料自身的缺失、矛盾或未确认要件阻断；已明确未签署且仅做谈判草稿辅助审查时，按受控 unsigned_draft 例外继续；附件未随送达或法域超出团队服务范围记录为可验证范围事实并继续交接；签章只按有来源锚点的文本声明或可见标记分级，绝不把文本或图像标记冒充真实性验证。",
+  "description": "O1 输入治理闸门。区分合同门禁、范围事实与执行能力状态；受控谈判草稿例外必须同时有明确请求和可审计对象证据。用本地只读结构校验工具验证回执，只向 Lead 交付。",
   "author": "DesireCore",
   "avatar": {
     "char": "闸",
@@ -89,7 +89,8 @@
       "AskUserQuestion",
       "Delegate",
       "SendMessage",
-      "FileDigest"
+      "FileDigest",
+      "StructuredFileValidate"
     ],
     "denied": [
       "Bash",
