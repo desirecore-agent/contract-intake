@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test skills/contract-intake-gate/tests/receipt-contract.test.mjs skills/contract-intake-gate/tests/consistency.contract.test.mjs skills/contract-intake-gate/tests/locked-knowledge-mapping.test.mjs",
+    "test": "node --test skills/contract-intake-gate/tests/receipt-contract.test.mjs skills/contract-intake-gate/tests/receipt-schema.test.mjs skills/contract-intake-gate/tests/consistency.contract.test.mjs skills/contract-intake-gate/tests/locked-knowledge-mapping.test.mjs",
     "test:members": "node --test skills/contract-intake-gate/tests/member-consistency.contract.test.mjs"
   },
   "devDependencies": {

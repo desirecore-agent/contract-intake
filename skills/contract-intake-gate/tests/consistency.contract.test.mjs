@@ -35,7 +35,7 @@ test('frontmatter is byte-zero YAML and skill versions are internally consistent
   const agent = JSON.parse(await read(path.join(intakeRoot, 'agent.json')))
   assert.equal(frontmatter.version, '1.0.7')
   assert.equal(frontmatter.metadata.version, '1.0.7')
-  assert.equal(agent.version, '1.0.7')
+  assert.equal(agent.version, '1.0.8')
 })
 
 test('real Draft-07 schema accepts the valid document and rejects the combined review counterexample', async () => {

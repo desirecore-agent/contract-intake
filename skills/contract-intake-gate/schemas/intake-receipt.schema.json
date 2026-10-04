@@ -67,6 +67,14 @@
         "source_scope": {"type": "string", "minLength": 1},
         "basis": {"type": "string", "minLength": 1}
       }
+    },
+    "version_unavailable_id": {
+      "enum": [
+        "FLG-SKILL-VERSION-UNAVAILABLE",
+        "FLG-SERVER-VERSION-UNAVAILABLE",
+        "FLG-KNOWLEDGE-BASE-VERSION-UNAVAILABLE",
+        "FLG-PARSER-REVISION-UNAVAILABLE"
+      ]
     }
   },
   "properties": {
@@ -119,7 +127,15 @@
       ]
     },
     "blocks": {"type": "array", "items": {"$ref": "#/definitions/finding"}},
-    "flags": {"type": "array", "items": {"$ref": "#/definitions/finding"}},
+    "flags": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {"$ref": "#/definitions/finding"},
+          {"if": {"properties": {"id": {"$ref": "#/definitions/version_unavailable_id"}}, "required": ["id"]}, "then": {"properties": {"gate_affecting": {"const": false}}, "required": ["gate_affecting"]}}
+        ]
+      }
+    },
     "scope_facts": {"type": "array", "items": {"$ref": "#/definitions/finding"}},
     "capability_status": {"enum": ["ready", "capability_debt"]},
     "serialization_status": {"enum": ["valid", "invalid", "unavailable"]},
@@ -145,8 +161,8 @@
   "allOf": [
     {"if": {"properties": {"blocks": {"minItems": 1}}, "required": ["blocks"]}, "then": {"properties": {"verdict": {"const": "blocked"}}}},
     {"if": {"properties": {"verdict": {"const": "blocked"}}, "required": ["verdict"]}, "then": {"properties": {"blocks": {"minItems": 1}, "handoff": {"properties": {"to": {"type": "null"}}}}}},
-    {"if": {"properties": {"verdict": {"const": "passed"}}, "required": ["verdict"]}, "then": {"properties": {"blocks": {"maxItems": 0}, "flags": {"items": {"properties": {"gate_affecting": {"const": false}}}}}}},
-    {"if": {"properties": {"verdict": {"const": "conditional"}}, "required": ["verdict"]}, "then": {"properties": {"blocks": {"maxItems": 0}, "flags": {"contains": {"properties": {"gate_affecting": {"const": true}}, "required": ["gate_affecting"]}}}}},
+    {"if": {"properties": {"verdict": {"const": "passed"}}, "required": ["verdict"]}, "then": {"properties": {"blocks": {"maxItems": 0}, "flags": {"items": {"properties": {"id": {"$ref": "#/definitions/version_unavailable_id"}, "gate_affecting": {"const": false}}}}}}},
+    {"if": {"properties": {"verdict": {"const": "conditional"}}, "required": ["verdict"]}, "then": {"properties": {"blocks": {"maxItems": 0}, "flags": {"contains": {"properties": {"gate_affecting": {"const": true}}, "required": ["gate_affecting"]}}, "handoff": {"properties": {"to": {"const": "contract-review-lead"}}}}}},
     {"if": {"properties": {"serialization_status": {"enum": ["invalid", "unavailable"]}}, "required": ["serialization_status"]}, "then": {"properties": {"handoff": {"properties": {"to": {"type": "null"}}}}}},
     {"if": {"properties": {"checks": {"contains": {"type": "object", "properties": {"id": {"const": "S7"}, "status": {"const": "flag"}}, "required": ["id", "status"]}}}, "required": ["checks"]}, "then": {"properties": {"flags": {"minItems": 1}}, "if": {"properties": {"blocks": {"maxItems": 0}}, "required": ["blocks"]}, "then": {"properties": {"verdict": {"const": "conditional"}}}, "else": {"properties": {"verdict": {"const": "blocked"}}}}},
     {"if": {"properties": {"checks": {"contains": {"type": "object", "properties": {"id": {"const": "S7"}, "status": {"const": "block"}}, "required": ["id", "status"]}}}, "required": ["checks"]}, "then": {"properties": {"blocks": {"minItems": 1}, "verdict": {"const": "blocked"}}}},

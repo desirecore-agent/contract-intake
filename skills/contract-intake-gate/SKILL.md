@@ -741,6 +741,11 @@ flags:
 `条件通过`，失去区分能力——那时它挡不住真问题，只会让所有结论看起来都一样。
 缺失属于「这一项没被覆盖」，应当在欠账表里显式留白，而不是变成对**合同本身**的判定。
 
+上述非门禁例外严格限定为四个编码：`FLG-SKILL-VERSION-UNAVAILABLE`、
+`FLG-SERVER-VERSION-UNAVAILABLE`、`FLG-KNOWLEDGE-BASE-VERSION-UNAVAILABLE`、
+`FLG-PARSER-REVISION-UNAVAILABLE`。它们可以与 `passed` 并存；除此之外的真实业务
+`FLG-*`（包括 `FLG-JURISDICTION-UNDETERMINED`）仍使结论至多为 `conditional`。
+
 **唯一例外**：`jurisdiction_pack_version` 取不到时仍按
 `FLG-JURISDICTION-UNDETERMINED` 处理（结论至多 `条件通过`），
 因为它直接决定下游能否出合规结论——那是对**审查能力**的判定，不是对合同的判定。若线索同时落在团队声明范围之外，优先记录 `SCOPE-JURISDICTION-OUT-OF-SCOPE`，并把实体合规环节标成 `not_covered`，而不是伪造一个“缺包”阻断。
@@ -785,8 +790,8 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 
 ```
 存在任一 BLK-*                              → blocked      拒绝
-无 BLK-*，存在门禁型 FLG-*                  → conditional  条件通过
-无 BLK-*，无 FLG-*，四大冻结全部 frozen      → passed       通过
+无 BLK-*，存在影响结论的 FLG-*               → conditional  条件通过
+无 BLK-*，仅有四类 S8 非门禁 FLG-* 或无 FLG-*，四大冻结全部 frozen → passed 通过
 ```
 
 `verdict` 字段写机器值（`passed` / `conditional` / `blocked`），`verdict_label` 必须分别写
@@ -802,7 +807,8 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` 明确解释附件清单冻结缺口；不得再附加
 `FLG-FREEZE-INCOMPLETE` 或为它生成第二条 pending。
 
-**跨字段一致性检查（出具前必须执行）**：`verdict: passed` 时不得留下任何 `FLG-*`；
+**跨字段一致性检查（出具前必须执行）**：`verdict: passed` 时不得留下四类 S8
+非门禁例外之外的任何 `FLG-*`；
 `verdict: conditional` 时每条影响结论的 `FLG-*` 都必须有匹配的 `handoff.pending`；
 其中 R9 必须严格使用 `PEND-001` 和 `must_escalate: true`。`verdict: blocked` 时
 `handoff.to` 必须为 `null`，即使同时存在 `FLG-*` 也不得交接。
@@ -829,7 +835,8 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 **结论为 `conditional` 时的强制动作**
 
 1. 照常交回 Lead，`handoff.to: contract-review-lead`。
-2. 每条 `FLG-*` 都进 `handoff.pending`，写清 `required_downstream_action`。
+2. 每条影响结论的 `FLG-*` 都进 `handoff.pending`，写清 `required_downstream_action`；四类 S8
+   非门禁例外只作为覆盖缺口留白，不得伪装成业务 pending。
 3. **不得**以任何形式暂停或缩减下游范围。
 
 ---
