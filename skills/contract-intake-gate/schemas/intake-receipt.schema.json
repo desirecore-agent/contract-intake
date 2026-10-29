@@ -35,7 +35,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["id", "source_scope", "action"],
       "properties": {
-        "id": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "pattern": "^PEND-[0-9]+$"},
         "source_scope": {"type": "string", "minLength": 1},
         "action": {"type": "string", "minLength": 1},
         "must_escalate": {"type": "boolean"}
@@ -126,12 +126,13 @@
         {"contains": {"properties": {"id": {"const": "S8"}}, "required": ["id"]}}
       ]
     },
-    "blocks": {"type": "array", "items": {"$ref": "#/definitions/finding"}},
+    "blocks": {"type": "array", "items": {"allOf": [{"$ref": "#/definitions/finding"}, {"properties": {"id": {"pattern": "^BLK-[A-Z0-9]+(-[A-Z0-9]+)*$"}}}]}},
     "flags": {
       "type": "array",
       "items": {
         "allOf": [
           {"$ref": "#/definitions/finding"},
+          {"properties": {"id": {"pattern": "^FLG-[A-Z0-9]+(-[A-Z0-9]+)*$"}}},
           {"if": {"properties": {"id": {"$ref": "#/definitions/version_unavailable_id"}}, "required": ["id"]}, "then": {"properties": {"gate_affecting": {"const": false}}, "required": ["gate_affecting"]}}
         ]
       }
@@ -159,6 +160,7 @@
     }
   },
   "allOf": [
+    {"if": {"properties": {"verdict": {"const": "passed"}, "serialization_status": {"const": "valid"}}, "required": ["verdict", "serialization_status"]}, "then": {"properties": {"handoff": {"properties": {"to": {"const": "contract-review-lead"}}}}}},
     {"if": {"properties": {"blocks": {"minItems": 1}}, "required": ["blocks"]}, "then": {"properties": {"verdict": {"const": "blocked"}}}},
     {"if": {"properties": {"verdict": {"const": "blocked"}}, "required": ["verdict"]}, "then": {"properties": {"blocks": {"minItems": 1}, "handoff": {"properties": {"to": {"type": "null"}}}}}},
     {"if": {"properties": {"verdict": {"const": "passed"}}, "required": ["verdict"]}, "then": {"properties": {"blocks": {"maxItems": 0}, "flags": {"items": {"properties": {"id": {"$ref": "#/definitions/version_unavailable_id"}, "gate_affecting": {"const": false}}}}}}},

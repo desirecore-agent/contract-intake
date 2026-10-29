@@ -53,7 +53,7 @@ metadata:
 3. **没检查到就显式留白**。检查矩阵里每一项都必须有状态；未覆盖写 `not_covered`，不得因为没提就当 `pass`。
 4. **四大冻结未全部成立时，禁止输出任何"一致 / 无差异 / 差异为 0"结论。**
 
-5. **结构化产物必须先保证 YAML 语法，再谈业务结论。** 机器消费的 `intake.yaml` 与回执
+5. **结构化产物必须先保证 YAML 语法，再谈业务结论。** 机器回执 `<intake_id>.receipt.yaml` 与详细事实 `<intake_id>.detail.yaml`
    只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
    或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
    禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
@@ -66,10 +66,12 @@ metadata:
      format:        yaml
    ```
 
+   `<intake_id>.detail.yaml` 同样写完即校验：`schema_path` 改用 `${SKILL_DIR}/schemas/yaml-syntax.schema.json`（只要求能解析成映射对象，不约束业务字段）。原文引文、四元组等自由文本都在 detail 里，最容易出语法错误。detail 校验失败记 serialization 欠账，连同工具诊断交回 Lead，不改合同 verdict；校验结果写进交接回复，不回写进 detail，也不写进回执的 `serialization_status`（该字段只描述回执本身，填 invalid/unavailable 会让交接置空）。
+
    `${SKILL_DIR}` 由 Skill 工具替换为本技能目录的绝对路径。最常见的解析失败是自由文本里未加引号的冒号，例如 `quote: yaml_unverified: true`，写入前按第 5 条改用单引号或块标量。没有校验工具的成功返回，不得声称“YAML 可解析/通过 safe_load”。工具失败属于 capability/serialization debt，不伪装成合同 FLG 或自动把合同 verdict 降为 conditional；无有效机器回执时 `handoff.to=null`，由 Lead 决定重试，O2 不启动。
 
    > 2026-09-29 实测：曾用“没有解析器就降为 conditional”兜底，结果 C01（只有范围事实、本应 `passed`）被降级，
-   > 而那一轮写出的 `intake.yaml` 恰好在第 164 行因未加引号的冒号解析失败。兜底既拿不到 `passed`，
+   > 而那一轮写出的 `intake.yaml`（当时的摘要文件名）恰好在第 164 行因未加引号的冒号解析失败。兜底既拿不到 `passed`，
    > 也没拦住真正的语法错误——所以只认真实解析结果，工具失败单独记欠账。
 7. **写入前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
    等自由文本逐个检查引号配对与缩进；无法安全编码时用块标量，不得为了省字删掉证据或改写
@@ -333,7 +335,7 @@ blocks:
 
 R9 命中且不存在任一 `BLK-*` 时，必须同时满足以下条件：
 
-1. `verdict: conditional` 且 `verdict_label: 条件通过`，并在 `flags` 写入结论四元组 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE`，
+1. `verdict: conditional`（detail.yaml 里另记 `verdict_label: 条件通过`；扁平机器回执没有 `verdict_label` 字段），并在 `flags` 写入结论四元组 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE`，
    `gate_reason_id: attachment-manifest-incomplete`，证据必须定位到“另附/完整清单”这一权威来源。
 2. `handoff.to` 保持正常下游目标；`conditional` 不是暂停或拒绝。
 3. `handoff.pending` 必须有且仅有本次 R9 对应的 `PEND-001`，其
@@ -808,7 +810,8 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 ```
 
 `verdict` 字段写机器值（`passed` / `conditional` / `blocked`），`verdict_label` 必须分别写
-`通过` / `条件通过` / `拒绝`，不得让两个字段表达不同结论。
+`通过` / `条件通过` / `拒绝`，不得让两个字段表达不同结论。`verdict_label` 只写在 `detail.yaml`；
+扁平机器回执 `receipt.yaml` 没有这个字段，写进去会被回执 Schema 拒绝。
 
 **`SCOPE-*` 不参与判定。**只有 `SCOPE-*` 记录、没有 `BLK-*` / `FLG-*` 时，结论是 `passed`，
 **不是** `conditional`。这是本技能最容易出的门禁错判：

@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "contract-intake detail.yaml 语法检查",
+  "description": "只要求文件能被 YAML 解析器读成一个映射对象，不约束任何业务字段。供 StructuredFileValidate 校验 <intake_id>.detail.yaml 的语法；业务判据仍由 SKILL.md 约束。",
+  "type": "object"
+}
