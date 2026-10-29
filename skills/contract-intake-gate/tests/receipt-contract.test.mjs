@@ -7,6 +7,7 @@ import { parse } from 'yaml'
 
 const testsDir = path.dirname(fileURLToPath(import.meta.url))
 const fixture = async (name) => parse(await readFile(path.join(testsDir, 'fixtures', name), 'utf8'))
+// 回执可能在 Windows 或 POSIX 宿主上生成；两种绝对路径都合法，不能用宿主平台的 path.isAbsolute 判。
 const isAbsolutePath = (value) => path.posix.isAbsolute(value) || path.win32.isAbsolute(value)
 
 function assertSignatureEvidenceContract(receipt) {

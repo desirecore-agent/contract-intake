@@ -57,7 +57,20 @@ metadata:
    只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
    或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
    禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
-6. **回读与结构校验必须有工具证据。** `Read` 只证明文件已回读；再用只读 `StructuredFileValidate` 按本地 schema 校验同一字节，并核对 document/schema SHA-256。工具失败属于 capability/serialization debt，不伪装成合同 FLG 或自动把合同 verdict 降为 conditional；无有效机器回执时 `handoff.to=null`，由 Lead 决定重试，O2 不启动。
+6. **回读与结构校验必须有工具证据。** `Read` 只证明文件已回读，不能证明 YAML 可解析；再用只读 `StructuredFileValidate` 按本地 schema 校验同一字节，并核对 document/schema SHA-256（完整步骤见下文「机器回执与详细事实必须分别可读取」）。调用形如：
+
+   ```
+   StructuredFileValidate
+     document_path: <回执的绝对路径>
+     schema_path:   ${SKILL_DIR}/schemas/intake-receipt.schema.json
+     format:        yaml
+   ```
+
+   `${SKILL_DIR}` 由 Skill 工具替换为本技能目录的绝对路径。最常见的解析失败是自由文本里未加引号的冒号，例如 `quote: yaml_unverified: true`，写入前按第 5 条改用单引号或块标量。没有校验工具的成功返回，不得声称“YAML 可解析/通过 safe_load”。工具失败属于 capability/serialization debt，不伪装成合同 FLG 或自动把合同 verdict 降为 conditional；无有效机器回执时 `handoff.to=null`，由 Lead 决定重试，O2 不启动。
+
+   > 2026-09-29 实测：曾用“没有解析器就降为 conditional”兜底，结果 C01（只有范围事实、本应 `passed`）被降级，
+   > 而那一轮写出的 `intake.yaml` 恰好在第 164 行因未加引号的冒号解析失败。兜底既拿不到 `passed`，
+   > 也没拦住真正的语法错误——所以只认真实解析结果，工具失败单独记欠账。
 7. **写入前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
    等自由文本逐个检查引号配对与缩进；无法安全编码时用块标量，不得为了省字删掉证据或改写
    原文。写入后再次 `Read`，保持 `input_file.absolute_path`、SHA 和所有门禁字段不变。
