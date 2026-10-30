@@ -33,9 +33,9 @@ test('frontmatter is byte-zero YAML and skill versions are internally consistent
   assert.ok(end > 4)
   const frontmatter = parse(text.slice(4, end))
   const agent = JSON.parse(await read(path.join(intakeRoot, 'agent.json')))
-  assert.equal(frontmatter.version, '1.0.8')
-  assert.equal(frontmatter.metadata.version, '1.0.8')
-  assert.equal(agent.version, '1.0.8')
+  assert.equal(frontmatter.version, '1.0.9')
+  assert.equal(frontmatter.metadata.version, '1.0.9')
+  assert.equal(agent.version, '1.0.9')
 })
 
 test('real Draft-07 schema accepts the valid document and rejects the combined review counterexample', async () => {
@@ -231,4 +231,53 @@ test('PEND-001 编号只留给 R9，R7 范围待办从 PEND-002 起编号', asyn
   assert.match(skill, /一律从 `PEND-002` 起顺序编号/)
   assert.match(skill, /R7 待办写 `from_flag: SCOPE-ATTACHMENT-BODY-ABSENT`、`must_escalate: false`/)
   assert.match(skill, /R7 待办只用于范围留白，不是 Human Gate pending，也不透传给 O5/)
+})
+
+test('落盘次序位于前提与 S1 之前：先写 detail 骨架，单次写入不超过约 3000 字，回执超限分段', async () => {
+  const text = await read(path.join(intakeRoot, 'skills/contract-intake-gate/SKILL.md'))
+  const order = text.indexOf('## 落盘次序（先于 S1）')
+  const premise = text.indexOf('## 不可协商的前提')
+  assert.ok(order > 0 && premise > order && text.indexOf('## S1 受理范围清点') > premise, '落盘次序必须放在前提与 S1 之前')
+  const body = text.slice(order, premise)
+  assert.match(body, /下一次回复只做两步：`GenerateUUID` 取本次 `intake_id`（格式 `INTAKE-<YYYYMMDD>-<uuid 前 8 位>`，S1 起一律沿用它），随后 `Write` `<intake_id>\.detail\.yaml` 骨架/)
+  assert.match(body, /写骨架之前不读正文、不推演 S1–S8/)
+  assert.match(body, /不超过约 3000 字/)
+  assert.match(body, /末尾留一行 `# <<续写回执>>`，再用 `Edit` 把这一行换成其余段/)
+  assert.doesNotMatch(text, /一次写成机器回执/)
+  assert.match(text, /机器回执与 `validation\.json`\n {3}交付时不留锚点/)
+})
+
+test('回执分段写入：前半留续写行、Edit 换成后半后与一次写成的字节一致且通过 schema', async () => {
+  const raw = await read(path.join(here, 'fixtures', 'schema-valid.receipt.yaml'))
+  const cut = raw.indexOf('\nblocks:')
+  assert.ok(cut > 0)
+  const anchor = '# <<续写回执>>'
+  const firstHalf = raw.slice(0, cut + 1) + anchor + '\n'
+  assert.doesNotThrow(() => parse(firstHalf), '前半加续写行应可解析')
+  assert.equal(firstHalf.split(anchor).length, 2, '续写行必须唯一')
+  const joined = firstHalf.replace(anchor + '\n', raw.slice(cut + 1))
+  assert.equal(joined, raw)
+  const validate = await validator()
+  assert.equal(validate(parse(joined)), true, JSON.stringify(validate.errors))
+  // 切在序列中间（两条 checks 之间）同样成立：续写行在序列里是注释，前半可解析，换回后一致
+  const mid = raw.indexOf('\n  - {id: S5')
+  assert.ok(mid > 0)
+  const midHalf = raw.slice(0, mid + 1) + anchor + '\n'
+  const midParsed = parse(midHalf)
+  assert.equal(midParsed.checks.length, 4, '前半应保留已写的 S1–S4')
+  assert.equal(midHalf.replace(anchor + '\n', raw.slice(mid + 1)), raw)
+})
+
+test('S1 沿用落盘次序的 intake_id，不再另取', async () => {
+  const text = await read(path.join(intakeRoot, 'skills/contract-intake-gate/SKILL.md'))
+  const s1 = text.slice(text.indexOf('## S1 受理范围清点'), text.indexOf('## S2 主版本冻结'))
+  assert.doesNotMatch(s1, /GenerateUUID/)
+  assert.match(s1, /沿用「落盘次序」已生成的 `intake_id`，不再另取/)
+  assert.equal((text.match(/INTAKE-<YYYYMMDD>-<uuid 前 8 位>/g) ?? []).length, 1, 'id 格式只在落盘次序写一处')
+})
+
+test('Lead 点名续写本产物 id 的重新委派按续跑处理', async () => {
+  const text = await read(path.join(intakeRoot, 'skills/contract-intake-gate/SKILL.md'))
+  assert.match(text, /续跑（含 Lead 点名续写本产物 id 的重新委派）时跳过本步：不再 `GenerateUUID`、不再 `Write` 骨架/)
+  assert.match(text, /被续跑时（含 Lead 因原运行已正常结束无法 resume、改用重新委派并在任务里点名续写本产物 id 的情形）会话里已有本次 `intake_id`/)
 })

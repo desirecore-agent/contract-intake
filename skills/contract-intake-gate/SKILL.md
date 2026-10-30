@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.8
+version: 1.0.9
 type: procedural
 risk_level: low
 status: enabled
@@ -34,7 +34,7 @@ requires:
     - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.8
+  version: 1.0.9
   updated_at: '2026-10-30'
   pipeline_stage: O1
   upstream: contract-review-lead
@@ -47,6 +47,14 @@ metadata:
 
 收到 Lead 登记并指定的合同对象时执行 O1。本技能不自行启动 O2/O3/O4/O5；只有有效的 `通过` 或 `条件通过` 回执可交回 Lead 继续编排。
 
+## 落盘次序（先于 S1）
+
+续跑（含 Lead 点名续写本产物 id 的重新委派）时跳过本步：不再 `GenerateUUID`、不再 `Write` 骨架，直接按「检索与核对的工具用法」第 3 条的续跑说明回读产物、接着做；用同一 id 重写骨架会把已写字段静默冲回占位。其余情况下，读完 Lead 的委派与材料路径后的下一次回复只做两步：`GenerateUUID` 取本次 `intake_id`（格式 `INTAKE-<YYYYMMDD>-<uuid 前 8 位>`，S1 起一律沿用它），随后 `Write` `<intake_id>.detail.yaml` 骨架（结构与逐步改写方法见下文「检索与核对的工具用法」第 3 条）。写骨架之前不读正文、不推演 S1–S8。之后一次回复只推进一个 S 步，结论随手用 `Edit` 写进 detail。
+
+单次 `Write` 的内容或 `Edit` 的 `new_string` 不超过约 3000 字。机器回执超过时分段写：先 `Write` 前半（身份、verdict、checks），末尾留一行 `# <<续写回执>>`，再用 `Edit` 把这一行换成其余段（最后一段不再留这一行），全部写完再校验。
+
+2026-10-30 真机：本成员第一次被委派时，七次在思考中准备一次写出整份 detail，工具参数要整段生成完才发出，生成途中连接静默满 90 秒被平台判为断流，这次委派作废；统筹官重派后按骨架逐步落盘顺利完成，但一次写约 7000 字的回执静默了 82 秒。
+
 ## 不可协商的前提
 
 1. **S1→S8 顺序固定**，不得打乱、不得跳步、不得因为"看起来没问题"提前结束。顺序固定是为了让任何人重跑得到同样的过程。
@@ -55,9 +63,10 @@ metadata:
 4. **四大冻结未全部成立时，禁止输出任何"一致 / 无差异 / 差异为 0"结论。**
 
 5. **结构化产物必须先保证 YAML 语法，再谈业务结论。** 机器回执 `<intake_id>.receipt.yaml` 与详细事实 `<intake_id>.detail.yaml`
-   只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
+   使用块式映射/序列；只有全部值都是简单标量（id、状态码、不含下列特殊字符的短词）的条目，可以写成单行流式 `{...}`，
+   如骨架里 S1–S8 的占位行。任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
    或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
-   禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
+   禁止把含英文双引号的文本放进双引号标量而不转义；含自由文本的条目禁止照抄流式示例。
 6. **回读与结构校验必须有工具证据。** `Read` 只证明文件已回读，不能证明 YAML 可解析；再用只读 `StructuredFileValidate` 按本地 schema 校验同一字节，并核对 document/schema SHA-256（完整步骤见下文「机器回执与详细事实必须分别可读取」）。调用形如：
 
    ```
@@ -94,10 +103,11 @@ metadata:
    从 `null` 改成实际内容，命中的阻断或标记追加到对应锚点。`Edit` 只替换第一处匹配：`old_string` 带键名与 id、
    取整行含行首缩进，确保在文件内唯一；`new_string` 每行写完整缩进，写完核对 diff 落在目标段。回复正文（不是思考）
    同时用一行记下：检查项、`pass/flag/block/n/a/not_covered`、编码与证据行号。一次回复只推进一个 S 步，不先在
-   思考里把 S1–S8 做完再一次性写。出具时删去锚点、空段改成 `[]`、校验 detail，再按 detail 一次写成机器回执
-   `receipt.yaml` 并校验，不再从头重新推导 S1–S8；机器回执与 `validation.json` 不用锚点。确需补查时只补该项，
-   并更新对应那一条。被续跑时会话里已有本次 `intake_id`：先 `Read` detail 确认已写到哪一步，从下一步接着做；
-   新的委派一律用新 `intake_id`，不读、不改其他 id 的产物。
+   思考里把 S1–S8 做完再一次性写。出具时删去锚点、空段改成 `[]`、校验 detail，再按 detail 写机器回执
+   `receipt.yaml`（超过约 3000 字时按上文「落盘次序」分段）并校验，不再从头重新推导 S1–S8；机器回执与 `validation.json`
+   交付时不留锚点。确需补查时只补该项，
+   并更新对应那一条。被续跑时（含 Lead 因原运行已正常结束无法 resume、改用重新委派并在任务里点名续写本产物 id 的情形）会话里已有本次 `intake_id`：先 `Read` detail 确认已写到哪一步，从下一步接着做；
+   新的委派一律用新 `intake_id`（Lead 点名续写某个产物 id 的除外），不读、不改其他 id 的产物。
 
 被委派时，若委派正文给出了 Lead 的 Plan 绝对路径，就读取并沿用它，不另建本技能自己的 Plan。
 
@@ -162,7 +172,7 @@ metadata:
 3. 识别提交模式：
    - `single` —— 单一版本受理
    - `version_comparison` —— 同一合同的两个及以上版本同时提交（要求做版本对照）
-4. 用 `GenerateUUID` 生成 `intake_id`，格式 `INTAKE-<YYYYMMDD>-<uuid 前 8 位>`。
+4. 沿用「落盘次序」已生成的 `intake_id`，不再另取。
 
 **“组成合同的文件”与附件清单的边界**：正文以“组成本合同的文件包括……”列举采购文件、
 答疑/更正公告、中标公告、响应文件、补充协议等程序性材料时，如果没有显式的“附件清单 / 合同附件 /
