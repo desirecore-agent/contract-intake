@@ -230,4 +230,5 @@ test('PEND-001 编号只留给 R9，R7 范围待办从 PEND-002 起编号', asyn
   assert.match(skill, /本次没有 R9 时也不使用这个编号/)
   assert.match(skill, /一律从 `PEND-002` 起顺序编号/)
   assert.match(skill, /R7 待办写 `from_flag: SCOPE-ATTACHMENT-BODY-ABSENT`、`must_escalate: false`/)
+  assert.match(skill, /R7 待办只用于范围留白，不是 Human Gate pending，也不透传给 O5/)
 })
