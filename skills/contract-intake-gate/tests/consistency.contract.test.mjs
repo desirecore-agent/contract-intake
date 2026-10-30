@@ -33,8 +33,8 @@ test('frontmatter is byte-zero YAML and skill versions are internally consistent
   assert.ok(end > 4)
   const frontmatter = parse(text.slice(4, end))
   const agent = JSON.parse(await read(path.join(intakeRoot, 'agent.json')))
-  assert.equal(frontmatter.version, '1.0.7')
-  assert.equal(frontmatter.metadata.version, '1.0.7')
+  assert.equal(frontmatter.version, '1.0.8')
+  assert.equal(frontmatter.metadata.version, '1.0.8')
   assert.equal(agent.version, '1.0.8')
 })
 
@@ -222,4 +222,12 @@ test('supplemental material requires a new run root and intake id without mutati
     previous: { canonicalRoot: '/authorized/C/O/V/R-1/../R-2', intakeId: 'INTAKE-1', receiptSha256: 'a'.repeat(64) },
     next: { canonicalRoot: '/authorized/C/O/V/R-2', intakeId: 'INTAKE-2', previousReceiptSha256: 'a'.repeat(64) },
   }).valid, false)
+})
+
+test('PEND-001 编号只留给 R9，R7 范围待办从 PEND-002 起编号', async () => {
+  const skill = await read(path.join(intakeRoot, 'skills/contract-intake-gate/SKILL.md'))
+  assert.match(skill, /\*\*`PEND-001` 编号只留给 R9\*\*/)
+  assert.match(skill, /本次没有 R9 时也不使用这个编号/)
+  assert.match(skill, /一律从 `PEND-002` 起顺序编号/)
+  assert.match(skill, /R7 待办写 `from_flag: SCOPE-ATTACHMENT-BODY-ABSENT`、`must_escalate: false`/)
 })

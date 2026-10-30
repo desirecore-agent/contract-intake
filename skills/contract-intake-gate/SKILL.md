@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.7
+version: 1.0.8
 type: procedural
 risk_level: low
 status: enabled
@@ -34,8 +34,8 @@ requires:
     - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.7
-  updated_at: '2026-09-15'
+  version: 1.0.8
+  updated_at: '2026-10-30'
   pipeline_stage: O1
   upstream: contract-review-lead
   downstream: [contract-review-lead]
@@ -368,7 +368,7 @@ R9 命中且不存在任一 `BLK-*` 时，必须同时满足以下条件：
 
 `must_escalate` **不**是全部 `FLG-*` 或全部未送达附件的通用推导。R8 继续按既有版本变化语义
 单独升级；R7 的 `SCOPE-ATTACHMENT-BODY-ABSENT` 仍可在无 `BLK-*` / `FLG-*` 时得到 `passed`，
-且不得生成 `PEND-001`。
+且不得生成 `PEND-001`。**`PEND-001` 编号只留给 R9**：本次没有 R9 时也不使用这个编号，其他 pending（含 R7 的范围待办）一律从 `PEND-002` 起顺序编号，R7 待办写 `from_flag: SCOPE-ATTACHMENT-BODY-ABSENT`、`must_escalate: false`。下游看到 `PEND-001` 就会按 R9 处理，编错号等于误报权威清单缺失。
 
 **失败后输出什么**
 
