@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.9
+version: 1.0.10
 type: procedural
 risk_level: low
 status: enabled
@@ -34,7 +34,7 @@ requires:
     - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.9
+  version: 1.0.10
   updated_at: '2026-10-30'
   pipeline_stage: O1
   upstream: contract-review-lead
@@ -263,7 +263,7 @@ freeze:
 1. 用 `Grep` 抓取全部页码标记。至少支持两种形态：
    - 中文：`第 N 页 / 共 M 页`
    - 英文：`Page N of M`
-2. **按部件分组**。正文一段序列、每个附件各一段序列。
+2. **按部件分组**。正文一段序列、每个附件各一段序列。条款落在哪一页按共享规则第四节判读页脚或页眉，不按页码行出现的次序数。
 3. 对每一组：
    - 取声明总页数 `M`（组内 `M` 不唯一时 → `BLK-PAGE-TOTAL-CONFLICT`）
    - 用 `MathCalc` 校验实际出现的页码集合是否等于 `{1..M}`
@@ -301,9 +301,9 @@ blocks:
     clause: null
     evidence:
       part: body
-      page: 3
-      locator: "第 2 页与第 4 页之间"
-      quote: "第 2 页 / 共 8 页 → 第 4 页 / 共 8 页"
+      page: 4
+      locator: "第 43 行（第 2 页）与第 65 行（第 4 页）之间缺第 3 页"
+      quote: "第 4 页 / 共 8 页"
     finding: 正文声明共 8 页，实际缺少第 3 页
     action: 补齐第 3 页原件后整份重新提交受理
 ```
@@ -390,8 +390,8 @@ freeze:
       - {no: 附件一, name: 接口对接清单, version: null, doc_no: null}
       - {no: 附件二, name: 技术规格书, version: V1.1, doc_no: null}
     referenced:
-      - {no: 附件一, name: 接口对接清单, version: null, at: {page: 1, clause: "1.1（三）"}}
-      - {no: 附件二, name: 技术规格书, version: V1.3, at: {page: 1, clause: "1.2"}}
+      - {no: 附件一, name: 接口对接清单, version: null, at: {page: 2, clause: "1.1（三）"}}
+      - {no: 附件二, name: 技术规格书, version: V1.3, at: {page: 2, clause: "1.2"}}
       - {no: 附件三, name: 验收标准,   version: null, at: {page: 2, clause: "2.3"}}
     delivered: []
 blocks:
@@ -411,7 +411,7 @@ blocks:
     clause: "1.2"
     evidence:
       part: body
-      page: 1
+      page: 2
       quote: "详细功能规格以附件二《技术规格书 V1.3》为准"
     finding: 正文引用版本 V1.3，附件清单（13.3）声明版本 V1.1，附件对象身份不确定
     action: 统一正文与附件清单的版本标识，确认以哪一版为准后重新提交
@@ -632,14 +632,14 @@ blocks:
     gate_reason_id: placeholder-unfilled
     severity: block
     clause: "4.1"
-    evidence: {part: body, page: 3, quote: "本合同总价款为人民币 $X 元（大写：【待定】）"}
+    evidence: {part: body, page: 4, quote: "本合同总价款为人民币 $X 元（大写：【待定】）"}
     finding: 合同总价款为金额占位符，大写金额为【待定】
     action: 填入确定的合同总价款（小写与大写一致）
   - code: BLK-PLACEHOLDER
     gate_reason_id: placeholder-unfilled
     severity: block
     clause: "4.3"
-    evidence: {part: body, page: 3, quote: "按人天单价 [金额] 元结算"}
+    evidence: {part: body, page: 4, quote: "按人天单价 [金额] 元结算"}
     finding: 变更结算的人天单价未填
     action: 填入确定的人天单价
 ```
@@ -692,7 +692,7 @@ blocks:
     clause: "10.4"
     evidence:
       part: body
-      page: 6
+      page: 7
       quote: "乙方应在 10 个工作日内向云梯科技（示例）有限公司移交全部已完成的阶段性成果"
     finding: 甲方权威名称为「云梯信息技术（示例）有限公司」，本条出现「云梯科技（示例）有限公司」，
       未在首部定义为简称，接收主体身份不明
@@ -919,7 +919,7 @@ contract_intake_receipt:
   intake_id: INTAKE-20260331-7f3a2c9b
   intake_at: 2026-03-31T09:12:04+08:00
   executed_by: contract-intake          # 执行 Agent
-  skill: contract-intake-gate@1.0.4
+  skill: contract-intake-gate@<本技能 frontmatter 的 version>   # 照实填写，不照抄示例
   verdict: blocked                      # passed | conditional | blocked
   verdict_label: 拒绝                   # 通过 | 条件通过 | 拒绝；必须与 verdict 对应
   verdict_basis: "命中 5 类阻断：placeholder-unfilled(×9) / page-discontinuity / attachment-missing / version-mismatch / party-name-inconsistency"
@@ -963,8 +963,8 @@ contract_intake_receipt:
 
   remediation:                          # 补齐清单（祈使句）
     - 补齐第 3 页原件，使正文页码构成连续的 1–8
-    - 填入合同总价款（4.1，第 3 页），小写与大写一致
-    - 补入附件三《验收标准》并登记进附件清单（13.3，第 7 页）
+    - 填入合同总价款（4.1，第 4 页），小写与大写一致
+    - 补入附件三《验收标准》并登记进附件清单（13.3，第 8 页）
     - 统一附件二版本标识：正文 1.2 为 V1.3，清单 13.3 为 V1.1
     - 将 10.4 的接收主体更正为甲方全称「云梯信息技术（示例）有限公司」
 
@@ -989,7 +989,7 @@ contract_intake_receipt:
   action: 补入附件三《验收标准》，并在附件清单中登记编号、名称与版本标识   # ④ 对应动作
 ```
 
-条款命中但页码不可得时：`page: null` + `FLG-CLAUSE-NO-PAGE`，并在 `locator` 给出可定位的行/段引用。
+条款命中但页码不可得时分两种：按共享规则第四节本来就没有页码的位置（如正文最后一处页码行之后的附件清单表），写 `page: unknown` 加行号 `locator`，不记 FLAG；有页码体系、却定位不到页的条款，写 `page: unknown` + `FLG-CLAUSE-NO-PAGE`，并在 `locator` 给出可定位的行/段引用。
 
 ---
 
@@ -1016,7 +1016,7 @@ handoff:
     - 签章字段已冻结：双方文本声明的公章 + 授权代表签字 + 职务 + 签署日期 2025-11-03 齐备（declared_in_text；未做图像或电子签真实性验证）
     - 无占位符、无空字段
     - 主体名称全文一致，无角色冲突
-    - 法域线索：准据法为中国法（16.1，第 6 页），规则包 cn-v3 匹配
+    - 法域线索：准据法为中国法（16.1，第 7 页），规则包 cn-v3 匹配
 
   pending:                              # 待确认项（下游不得自行消化）
     - id: PEND-002
@@ -1025,7 +1025,7 @@ handoff:
       statement: 附件二由 SLA-v1.2 替换为 SLA-v2.0（文档编号 YCIT-DOC-SLA-v1.2 → YCIT-DOC-SLA-v2.0）；
         正文逐字相同（body_diff_count=0），**不得据此判定两版一致**
       required_downstream_action: 对附件二正文做实质条款对比，并给出风险变化方向（上升 / 下调 / 持平）
-      evidence: {part: body, page: 7, quote: "附件二 | 服务水平协议 | SLA-v2.0 | YCIT-DOC-SLA-v2.0"}
+      evidence: {part: body, page: unknown, locator: "行 160（正文最后一处页码行第 151 行之后的附件清单表）", quote: "附件二 | 服务水平协议 | SLA-v2.0 | YCIT-DOC-SLA-v2.0"}
     - id: PEND-003
       from_flag: SCOPE-ATTACHMENT-BODY-ABSENT
       must_escalate: false

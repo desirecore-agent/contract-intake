@@ -33,9 +33,12 @@ test('frontmatter is byte-zero YAML and skill versions are internally consistent
   assert.ok(end > 4)
   const frontmatter = parse(text.slice(4, end))
   const agent = JSON.parse(await read(path.join(intakeRoot, 'agent.json')))
-  assert.equal(frontmatter.version, '1.0.9')
-  assert.equal(frontmatter.metadata.version, '1.0.9')
-  assert.equal(agent.version, '1.0.9')
+  assert.equal(frontmatter.version, '1.0.10')
+  assert.equal(frontmatter.metadata.version, '1.0.10')
+  assert.equal(agent.version, '1.0.10')
+  // 2026-10-30 E 轮：detail 照抄示例里写死的旧版本号 1.0.4；示例只给占位，不写具体版本
+  assert.doesNotMatch(text, /contract-intake-gate@\d/, '技能文本不得写死技能版本号')
+  assert.match(text, /skill: contract-intake-gate@<本技能 frontmatter 的 version>/)
 })
 
 test('real Draft-07 schema accepts the valid document and rejects the combined review counterexample', async () => {
@@ -280,4 +283,36 @@ test('Lead 点名续写本产物 id 的重新委派按续跑处理', async () =>
   const text = await read(path.join(intakeRoot, 'skills/contract-intake-gate/SKILL.md'))
   assert.match(text, /续跑（含 Lead 点名续写本产物 id 的重新委派）时跳过本步：不再 `GenerateUUID`、不再 `Write` 骨架/)
   assert.match(text, /被续跑时（含 Lead 因原运行已正常结束无法 resume、改用重新委派并在任务里点名续写本产物 id 的情形）会话里已有本次 `intake_id`/)
+})
+
+// 2026-10-30 复审：示例页码取自 C02/C06b，曾按页码行出现次序或页眉读法写成第 1/3/6 页；模型会照抄示例。
+// C02 页码行在第 21/43/65/80/100/119/142 行（第 1、2、4、5、6、7、8 页，有意缺第 3 页），尾部无条款，按共享规则第四节为页脚：
+// 1.1（三）L28、1.2 L29、2.3 L40 → 第 2 页；4.1 L53、L59 → 第 4 页；10.4 L107、12.1 L116 → 第 7 页；13.3 L125 → 第 8 页。
+// C06b 正文 16.1 L126 → 第 7 页；附件清单表 L160 在正文最后一处页码行之后，无页码。
+test('取自 C02/C06b 的示例页码按共享规则第四节推算', async () => {
+  const text = await read(path.join(intakeRoot, 'skills/contract-intake-gate/SKILL.md'))
+  const pageOfQuote = (quote) => {
+    const at = text.indexOf(`quote: "${quote}`)
+    assert.ok(at > 0, quote)
+    return Number(text.slice(text.lastIndexOf('page:', at) + 5, at).match(/\d+/)[0])
+  }
+  assert.equal(pageOfQuote('详细功能规格以附件二《技术规格书 V1.3》为准'), 2)
+  assert.equal(pageOfQuote('各里程碑的验收标准依附件三《验收标准》执行'), 2)
+  assert.equal(pageOfQuote('本合同总价款为人民币 $X 元（大写：【待定】）'), 4)
+  assert.equal(pageOfQuote('按人天单价 [金额] 元结算'), 4)
+  assert.equal(pageOfQuote('乙方应在 10 个工作日内向云梯科技（示例）有限公司移交全部已完成的阶段性成果'), 7)
+  assert.equal(pageOfQuote('本合同适用中华人民共和国法律'), 7)
+  assert.match(text, /at: \{page: 2, clause: "1\.1（三）"\}/)
+  assert.match(text, /at: \{page: 2, clause: "1\.2"\}/)
+  assert.match(text, /填入合同总价款（4\.1，第 4 页）/)
+  assert.match(text, /登记进附件清单（13\.3，第 8 页）/)
+  assert.match(text, /准据法为中国法（16\.1，第 7 页）/)
+  assert.match(text, /page: unknown, locator: "行 160（正文最后一处页码行第 151 行之后的附件清单表）", quote: "附件二 \| 服务水平协议 \| SLA-v2\.0/)
+  // 缺页示例：以印出的页码为准，quote 必须能在原文 grep 到（C02 L65「第 4 页 / 共 8 页」）
+  assert.match(text, /page: 4\n\s+locator: "第 43 行（第 2 页）与第 65 行（第 4 页）之间缺第 3 页"\n\s+quote: "第 4 页 \/ 共 8 页"/)
+  assert.doesNotMatch(text, /→ 第 4 页 \/ 共 8 页/)
+  // 本来就没有页码的位置不记 FLAG：C06a/C06b 期望门禁为 passed，记 FLG-CLAUSE-NO-PAGE 会降为 conditional
+  assert.match(text, /按共享规则第四节本来就没有页码的位置（如正文最后一处页码行之后的附件清单表），写 `page: unknown` 加行号 `locator`，不记 FLAG；有页码体系、却定位不到页的条款，写 `page: unknown` \+ `FLG-CLAUSE-NO-PAGE`/)
+  assert.doesNotMatch(text, /`page: null` \+ `FLG-CLAUSE-NO-PAGE`/)
+  assert.match(text, /条款落在哪一页按共享规则第四节判读页脚或页眉，不按页码行出现的次序数/)
 })
