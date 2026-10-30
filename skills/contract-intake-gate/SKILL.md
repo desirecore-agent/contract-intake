@@ -9,7 +9,7 @@ description: >-
   Use when gating contract materials before clause extraction: freezes master version,
   attachment manifest, page range and execution status; blocks placeholders, missing
   attachments, unconfirmed signatures, broken pagination and party-name mismatches.
-version: 1.0.7
+version: 1.0.10
 type: procedural
 risk_level: low
 status: enabled
@@ -26,21 +26,34 @@ requires:
     - Glob
     - Grep
     - Write
+    - Edit
     - MathCalc
     - GenerateUUID
     - UnderstandImage
+    - FileDigest
+    - StructuredFileValidate
 metadata:
   author: DesireCore
-  version: 1.0.7
-  updated_at: '2026-09-15'
+  version: 1.0.10
+  updated_at: '2026-10-30'
+  pipeline_stage: O1
+  upstream: contract-review-lead
+  downstream: [contract-review-lead]
 ---
 
 # 合同输入治理闸门
 
 ## 何时使用
 
-收到任何待审查的合同材料时**第一个**执行本技能。下游的条款抽取、风险识别、法域合规、
-复核出报告四个环节，只有在本技能给出 `通过` 或 `条件通过` 后才允许启动。
+收到 Lead 登记并指定的合同对象时执行 O1。本技能不自行启动 O2/O3/O4/O5；只有有效的 `通过` 或 `条件通过` 回执可交回 Lead 继续编排。
+
+## 落盘次序（先于 S1）
+
+续跑（含 Lead 点名续写本产物 id 的重新委派）时跳过本步：不再 `GenerateUUID`、不再 `Write` 骨架，直接按「检索与核对的工具用法」第 3 条的续跑说明回读产物、接着做；用同一 id 重写骨架会把已写字段静默冲回占位。其余情况下，读完 Lead 的委派与材料路径后的下一次回复只做两步：`GenerateUUID` 取本次 `intake_id`（格式 `INTAKE-<YYYYMMDD>-<uuid 前 8 位>`，S1 起一律沿用它），随后 `Write` `<intake_id>.detail.yaml` 骨架（结构与逐步改写方法见下文「检索与核对的工具用法」第 3 条）。写骨架之前不读正文、不推演 S1–S8。之后一次回复只推进一个 S 步，结论随手用 `Edit` 写进 detail。
+
+单次 `Write` 的内容或 `Edit` 的 `new_string` 不超过约 3000 字。机器回执超过时分段写：先 `Write` 前半（身份、verdict、checks），末尾留一行 `# <<续写回执>>`，再用 `Edit` 把这一行换成其余段（最后一段不再留这一行），全部写完再校验。
+
+2026-10-30 真机：本成员第一次被委派时，七次在思考中准备一次写出整份 detail，工具参数要整段生成完才发出，生成途中连接静默满 90 秒被平台判为断流，这次委派作废；统筹官重派后按骨架逐步落盘顺利完成，但一次写约 7000 字的回执静默了 82 秒。
 
 ## 不可协商的前提
 
@@ -49,41 +62,54 @@ metadata:
 3. **没检查到就显式留白**。检查矩阵里每一项都必须有状态；未覆盖写 `not_covered`，不得因为没提就当 `pass`。
 4. **四大冻结未全部成立时，禁止输出任何"一致 / 无差异 / 差异为 0"结论。**
 
-5. **结构化产物必须先保证 YAML 语法，再谈业务结论。** 机器消费的 `intake.yaml` 与回执
-   只能使用块式映射/序列；任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
+5. **结构化产物必须先保证 YAML 语法，再谈业务结论。** 机器回执 `<intake_id>.receipt.yaml` 与详细事实 `<intake_id>.detail.yaml`
+   使用块式映射/序列；只有全部值都是简单标量（id、状态码、不含下列特殊字符的短词）的条目，可以写成单行流式 `{...}`，
+   如骨架里 S1–S8 的占位行。任何标量中含 ASCII 双引号、冒号、井号、方括号、花括号、换行
    或前导/尾随空格时，必须改用单引号（单引号本身写成两个连续单引号）或块标量 `|` / `>`。
-   禁止把含英文双引号的文本放进双引号标量而不转义，禁止复制 flow map/flow sequence 示例。
-6. **YAML 语法由 `StructuredFileValidate` 验证，回读不算数。** `Read` 只能证明文件内容已回读，
-   不能证明 YAML 可解析。每写完一个机器消费的 YAML 产物（正式回执、编排官要求的 `intake.yaml`
-   摘要等），立即调用：
+   禁止把含英文双引号的文本放进双引号标量而不转义；含自由文本的条目禁止照抄流式示例。
+6. **回读与结构校验必须有工具证据。** `Read` 只证明文件已回读，不能证明 YAML 可解析；再用只读 `StructuredFileValidate` 按本地 schema 校验同一字节，并核对 document/schema SHA-256（完整步骤见下文「机器回执与详细事实必须分别可读取」）。调用形如：
 
    ```
    StructuredFileValidate
-     document_path: <该文件的绝对路径>
+     document_path: <回执的绝对路径>
      schema_path:   ${SKILL_DIR}/schemas/intake-receipt.schema.json
      format:        yaml
    ```
 
-   `${SKILL_DIR}` 由 Skill 工具替换为本技能目录的绝对路径。这份 Schema 只校验语法与门禁字段
-   （三态字面量、标签对应、blocked 不交接、pending 条目形状），不替代本技能的业务判据。
+   `<intake_id>.detail.yaml` 同样写完即校验：`schema_path` 改用 `${SKILL_DIR}/schemas/yaml-syntax.schema.json`（只要求能解析成映射对象，不约束业务字段）。原文引文、四元组等自由文本都在 detail 里，最容易出语法错误。detail 校验失败记 serialization 欠账，连同工具诊断交回 Lead，不改合同 verdict；校验结果写进交接回复，不回写进 detail，也不写进回执的 `serialization_status`（该字段只描述回执本身，填 invalid/unavailable 会让交接置空）。
 
-   - 返回 `valid: true`：语法已由解析器验证，**不写** `yaml_unverified`，结论照常按判定表出具。
-   - 报解析失败或 `valid: false`：按返回的诊断修正后重写，再次校验，最多三轮。最常见的原因是
-     自由文本里未加引号的冒号，例如 `quote: yaml_unverified: true`——按第 5 条改用单引号或块标量。
-   - 工具不可用（不在工具清单、授权被拒、读不到 Schema）或三轮后仍未通过：才退回兜底做法——
-     写明“已回读，语法未由解析器验证”，在产物中保留 `yaml_unverified: true`，并将受影响结论
-     降为 `conditional`，不得发送 `passed`。
+   `${SKILL_DIR}` 由 Skill 工具替换为本技能目录的绝对路径。最常见的解析失败是自由文本里未加引号的冒号，例如 `quote: yaml_unverified: true`，写入前按第 5 条改用单引号或块标量。没有校验工具的成功返回，不得声称“YAML 可解析/通过 safe_load”。工具失败属于 capability/serialization debt，不伪装成合同 FLG 或自动把合同 verdict 降为 conditional；无有效机器回执时 `handoff.to=null`，由 Lead 决定重试，O2 不启动。
 
-   没有校验工具的成功返回，不得声称“YAML 可解析/通过 safe_load”。校验结果（`valid` 与
-   `report_sha256`）写进给编排官的交接回复，**不回写进已校验的文件**——回写会改变文件内容，
-   使刚才的校验结论失效。
-
-   > 2026-09-29 实测：没有校验工具时，这条兜底让 C01（只有范围事实、本应 `passed`）被降为
-   > `conditional`；而那一轮写出的 `intake.yaml` 恰好就在第 164 行因未加引号的冒号解析失败。
-   > 兜底既拿不到 `passed`，也没拦住真正的语法错误——两者都要靠真的去解析。
+   > 2026-09-29 实测：曾用“没有解析器就降为 conditional”兜底，结果 C01（只有范围事实、本应 `passed`）被降级，
+   > 而那一轮写出的 `intake.yaml`（当时的摘要文件名）恰好在第 164 行因未加引号的冒号解析失败。兜底既拿不到 `passed`，
+   > 也没拦住真正的语法错误——所以只认真实解析结果，工具失败单独记欠账。
 7. **写入前自检高风险标量。** 对 `note`、`detail`、`finding`、`statement`、`evidence.quote`
    等自由文本逐个检查引号配对与缩进；无法安全编码时用块标量，不得为了省字删掉证据或改写
    原文。写入后再次 `Read`，保持 `input_file.absolute_path`、SHA 和所有门禁字段不变。
+
+## 检索与核对的工具用法（避免空转）
+
+2026-10-29 真机运行 C01 时，本技能用了约 100 分钟才出具回执，工具总耗时只有约 12 秒，其余全在模型生成：
+每轮都在思考里把 S1–S8 从头再汇总一遍，再决定补查一项；另有两轮因正则检索漏传参数而落空。以下三条用来避免这种空转：
+
+1. **正则必须显式声明。** `Grep` 的模式含 `|`、`.*`、`\s`、`[...]`、`(...)` 等正则语法时，必须同时传 `is_regex: true`；
+   省略时按字面文本匹配，查不到也不会报错。检索结果为零时，先确认参数，再下「不存在」的结论。
+2. **原文引文批量核对。** 核对已摘出的引文、名称、金额是否逐字存在于原件时，用 `Grep` 的 `literals`
+   批量模式（只传 `literals` 和单个文件 `path`，一次 1–64 项，返回每项命中与行列），不要逐条 `Grep`。
+3. **每步结论随手落盘，不在思考里反复重推。** S1 开始前生成本次 `intake_id`，先 `Write` `<intake_id>.detail.yaml`
+   骨架（结构见下文「详细事实结构」）：身份字段；`checks` 预填 S1–S8 各一行，带步骤 id 与 `status: not_covered`；
+   `scope`、`freeze` 下四项与 `version_matrix` 写 `null` 占位；`blocks`、`flags` 下各留一行锚点注释
+   `# <<追加 blocks>>`、`# <<追加 flags>>`。每完成一个 S 步，就用 `Edit` 按步骤 id 原地改写该行、把该步的映射段
+   从 `null` 改成实际内容，命中的阻断或标记追加到对应锚点。`Edit` 只替换第一处匹配：`old_string` 带键名与 id、
+   取整行含行首缩进，确保在文件内唯一；`new_string` 每行写完整缩进，写完核对 diff 落在目标段。回复正文（不是思考）
+   同时用一行记下：检查项、`pass/flag/block/n/a/not_covered`、编码与证据行号。一次回复只推进一个 S 步，不先在
+   思考里把 S1–S8 做完再一次性写。出具时删去锚点、空段改成 `[]`、校验 detail，再按 detail 写机器回执
+   `receipt.yaml`（超过约 3000 字时按上文「落盘次序」分段）并校验，不再从头重新推导 S1–S8；机器回执与 `validation.json`
+   交付时不留锚点。确需补查时只补该项，
+   并更新对应那一条。被续跑时（含 Lead 因原运行已正常结束无法 resume、改用重新委派并在任务里点名续写本产物 id 的情形）会话里已有本次 `intake_id`：先 `Read` detail 确认已写到哪一步，从下一步接着做；
+   新的委派一律用新 `intake_id`（Lead 点名续写某个产物 id 的除外），不读、不改其他 id 的产物。
+
+被委派时，若委派正文给出了 Lead 的 Plan 绝对路径，就读取并沿用它，不另建本技能自己的 Plan。
 
 ---
 
@@ -146,7 +172,7 @@ metadata:
 3. 识别提交模式：
    - `single` —— 单一版本受理
    - `version_comparison` —— 同一合同的两个及以上版本同时提交（要求做版本对照）
-4. 用 `GenerateUUID` 生成 `intake_id`，格式 `INTAKE-<YYYYMMDD>-<uuid 前 8 位>`。
+4. 沿用「落盘次序」已生成的 `intake_id`，不再另取。
 
 **“组成合同的文件”与附件清单的边界**：正文以“组成本合同的文件包括……”列举采购文件、
 答疑/更正公告、中标公告、响应文件、补充协议等程序性材料时，如果没有显式的“附件清单 / 合同附件 /
@@ -237,7 +263,7 @@ freeze:
 1. 用 `Grep` 抓取全部页码标记。至少支持两种形态：
    - 中文：`第 N 页 / 共 M 页`
    - 英文：`Page N of M`
-2. **按部件分组**。正文一段序列、每个附件各一段序列。
+2. **按部件分组**。正文一段序列、每个附件各一段序列。条款落在哪一页按共享规则第四节判读页脚或页眉，不按页码行出现的次序数。
 3. 对每一组：
    - 取声明总页数 `M`（组内 `M` 不唯一时 → `BLK-PAGE-TOTAL-CONFLICT`）
    - 用 `MathCalc` 校验实际出现的页码集合是否等于 `{1..M}`
@@ -275,9 +301,9 @@ blocks:
     clause: null
     evidence:
       part: body
-      page: 3
-      locator: "第 2 页与第 4 页之间"
-      quote: "第 2 页 / 共 8 页 → 第 4 页 / 共 8 页"
+      page: 4
+      locator: "第 43 行（第 2 页）与第 65 行（第 4 页）之间缺第 3 页"
+      quote: "第 4 页 / 共 8 页"
     finding: 正文声明共 8 页，实际缺少第 3 页
     action: 补齐第 3 页原件后整份重新提交受理
 ```
@@ -343,7 +369,7 @@ blocks:
 
 R9 命中且不存在任一 `BLK-*` 时，必须同时满足以下条件：
 
-1. `verdict: conditional` 且 `verdict_label: 条件通过`，并在 `flags` 写入结论四元组 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE`，
+1. `verdict: conditional`（detail.yaml 里另记 `verdict_label: 条件通过`；扁平机器回执没有 `verdict_label` 字段），并在 `flags` 写入结论四元组 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE`，
    `gate_reason_id: attachment-manifest-incomplete`，证据必须定位到“另附/完整清单”这一权威来源。
 2. `handoff.to` 保持正常下游目标；`conditional` 不是暂停或拒绝。
 3. `handoff.pending` 必须有且仅有本次 R9 对应的 `PEND-001`，其
@@ -352,7 +378,7 @@ R9 命中且不存在任一 `BLK-*` 时，必须同时满足以下条件：
 
 `must_escalate` **不**是全部 `FLG-*` 或全部未送达附件的通用推导。R8 继续按既有版本变化语义
 单独升级；R7 的 `SCOPE-ATTACHMENT-BODY-ABSENT` 仍可在无 `BLK-*` / `FLG-*` 时得到 `passed`，
-且不得生成 `PEND-001`。
+且不得生成 `PEND-001`。**`PEND-001` 编号只留给 R9**：本次没有 R9 时也不使用这个编号，其他 pending（含 R7 的范围待办）一律从 `PEND-002` 起顺序编号，R7 待办写 `from_flag: SCOPE-ATTACHMENT-BODY-ABSENT`、`must_escalate: false`。下游看到 `PEND-001` 就会按 R9 处理，编错号等于误报权威清单缺失。R7 待办只用于范围留白，不是 Human Gate pending，也不透传给 O5。
 
 **失败后输出什么**
 
@@ -364,8 +390,8 @@ freeze:
       - {no: 附件一, name: 接口对接清单, version: null, doc_no: null}
       - {no: 附件二, name: 技术规格书, version: V1.1, doc_no: null}
     referenced:
-      - {no: 附件一, name: 接口对接清单, version: null, at: {page: 1, clause: "1.1（三）"}}
-      - {no: 附件二, name: 技术规格书, version: V1.3, at: {page: 1, clause: "1.2"}}
+      - {no: 附件一, name: 接口对接清单, version: null, at: {page: 2, clause: "1.1（三）"}}
+      - {no: 附件二, name: 技术规格书, version: V1.3, at: {page: 2, clause: "1.2"}}
       - {no: 附件三, name: 验收标准,   version: null, at: {page: 2, clause: "2.3"}}
     delivered: []
 blocks:
@@ -385,7 +411,7 @@ blocks:
     clause: "1.2"
     evidence:
       part: body
-      page: 1
+      page: 2
       quote: "详细功能规格以附件二《技术规格书 V1.3》为准"
     finding: 正文引用版本 V1.3，附件清单（13.3）声明版本 V1.1，附件对象身份不确定
     action: 统一正文与附件清单的版本标识，确认以哪一版为准后重新提交
@@ -606,14 +632,14 @@ blocks:
     gate_reason_id: placeholder-unfilled
     severity: block
     clause: "4.1"
-    evidence: {part: body, page: 3, quote: "本合同总价款为人民币 $X 元（大写：【待定】）"}
+    evidence: {part: body, page: 4, quote: "本合同总价款为人民币 $X 元（大写：【待定】）"}
     finding: 合同总价款为金额占位符，大写金额为【待定】
     action: 填入确定的合同总价款（小写与大写一致）
   - code: BLK-PLACEHOLDER
     gate_reason_id: placeholder-unfilled
     severity: block
     clause: "4.3"
-    evidence: {part: body, page: 3, quote: "按人天单价 [金额] 元结算"}
+    evidence: {part: body, page: 4, quote: "按人天单价 [金额] 元结算"}
     finding: 变更结算的人天单价未填
     action: 填入确定的人天单价
 ```
@@ -623,6 +649,14 @@ blocks:
 ## S7 一致性校验：主体身份与金额大小写
 
 本步包含两个独立子检查，都属于"文档内部自相矛盾"这一类。
+
+### 角色适用性先于识别号缺失判定
+
+逐主体建立 `party_assessments[]`，保留 `party_id`、`party_role`、原文角色来源 `role_source`、`identifier_applicability`、`identifier_status` 与 `basis`。`party_role` 仅从材料确定为 buyer、seller、employer、employee、provider、customer、witness、guarantor、other 或 unknown；角色未知不能猜作主合同当事方。
+
+先判断识别号对该主体是否为 `required`、`not_applicable` 或 `unknown`，再判断状态为 `present`、`missing`、`redacted` 或 `unknown`。主合同当事方也不能仅凭角色认定某一特定识别号必需，必须记载材料、对象类型及本次范围的依据。自然人、见证人、境外主体不得机械套用大陆法人信用代码要求。`not_applicable` 不填 `identifier_value`，状态为 unknown 或 redacted，并记录不适用依据；它不是“已提供”。`present` 必须记录原文真实值。未知适用性记明待确认事实，不按缺失或通过处理。
+
+仅在适用性已确认 `required`、实际检索后仍 `missing` 时，记 `FLG-PARTY-ID-ABSENT`，S7 为 flag，保留检索范围、检索词与补料动作，并使 flags/verdict 一致；如同时有其他 BLK，blocked 优先。`required` 的状态只可为 present/missing/redacted；`not_applicable` 表示该角色经来源确认不承担本门禁要求，`unknown` 表示角色或适用规则仍无法确认，后二者的 identifier_status 均保持 unknown 且不得携带臆造号码。脱敏掩码不等同缺失：只有已确认 required 时才记 redacted；不为通过校验补写号码。下列名称一致性、合法简称和金额规则仍须分别执行。
 
 ### S7.1 主体身份一致性
 
@@ -645,7 +679,7 @@ blocks:
 | 出现与权威名称不同、且未定义为简称的主体名称 | `BLK-PARTY-INCONSISTENT` |
 | 同一主体在不同条款被指为不同角色 | `BLK-PARTY-ROLE-CONFLICT` |
 | 首部已定义简称（如"以下简称'服务商'"）且全文使用一致 | `pass`，**不得报错** |
-| 统一社会信用代码缺失 | `FLG-PARTY-ID-ABSENT` |
+| `identifier_applicability: required` 且实查为 `identifier_status: missing` | `FLG-PARTY-ID-ABSENT`；不适用或未知不得套用此行 |
 
 > ⚠️ 最容易误报的地方：合法简称。首部写了"（以下简称'乙方'）"或"（以下简称'服务商'）"的，
 > 全文使用该简称是**正确**的，不是不一致。校验前先建立"权威名称 → 已定义简称"映射表。
@@ -658,7 +692,7 @@ blocks:
     clause: "10.4"
     evidence:
       part: body
-      page: 6
+      page: 7
       quote: "乙方应在 10 个工作日内向云梯科技（示例）有限公司移交全部已完成的阶段性成果"
     finding: 甲方权威名称为「云梯信息技术（示例）有限公司」，本条出现「云梯科技（示例）有限公司」，
       未在首部定义为简称，接收主体身份不明
@@ -756,6 +790,11 @@ flags:
 `条件通过`，失去区分能力——那时它挡不住真问题，只会让所有结论看起来都一样。
 缺失属于「这一项没被覆盖」，应当在欠账表里显式留白，而不是变成对**合同本身**的判定。
 
+上述非门禁例外严格限定为四个编码：`FLG-SKILL-VERSION-UNAVAILABLE`、
+`FLG-SERVER-VERSION-UNAVAILABLE`、`FLG-KNOWLEDGE-BASE-VERSION-UNAVAILABLE`、
+`FLG-PARSER-REVISION-UNAVAILABLE`。它们可以与 `passed` 并存；除此之外的真实业务
+`FLG-*`（包括 `FLG-JURISDICTION-UNDETERMINED`）仍使结论至多为 `conditional`。
+
 **唯一例外**：`jurisdiction_pack_version` 取不到时仍按
 `FLG-JURISDICTION-UNDETERMINED` 处理（结论至多 `条件通过`），
 因为它直接决定下游能否出合规结论——那是对**审查能力**的判定，不是对合同的判定。若线索同时落在团队声明范围之外，优先记录 `SCOPE-JURISDICTION-OUT-OF-SCOPE`，并把实体合规环节标成 `not_covered`，而不是伪造一个“缺包”阻断。
@@ -800,12 +839,13 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 
 ```
 存在任一 BLK-*                              → blocked      拒绝
-无 BLK-*，存在任一影响结论的 FLG-*          → conditional  条件通过
-无 BLK-*，无影响结论的 FLG-*，四大冻结全部 frozen → passed   通过
+无 BLK-*，存在影响结论的 FLG-*               → conditional  条件通过
+无 BLK-*，仅有四类 S8 非门禁 FLG-* 或无 FLG-*，四大冻结全部 frozen → passed 通过
 ```
 
 `verdict` 字段写机器值（`passed` / `conditional` / `blocked`），`verdict_label` 必须分别写
-`通过` / `条件通过` / `拒绝`，不得让两个字段表达不同结论。
+`通过` / `条件通过` / `拒绝`，不得让两个字段表达不同结论。`verdict_label` 只写在 `detail.yaml`；
+扁平机器回执 `receipt.yaml` 没有这个字段，写进去会被回执 Schema 拒绝。
 
 **`SCOPE-*` 不参与判定。**只有 `SCOPE-*` 记录、没有 `BLK-*` / `FLG-*` 时，结论是 `passed`，
 **不是** `conditional`。这是本技能最容易出的门禁错判：
@@ -817,24 +857,18 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 `FLG-ATTACHMENT-MANIFEST-INCOMPLETE` 明确解释附件清单冻结缺口；不得再附加
 `FLG-FREEZE-INCOMPLETE` 或为它生成第二条 pending。
 
-**「影响结论的 FLG-\*」**指除 S8 版本维度「取不到值」标记之外的全部 `FLG-*`。
-这四类标记——`FLG-SKILL-VERSION-UNAVAILABLE`、`FLG-SERVER-VERSION-UNAVAILABLE`、
-`FLG-KNOWLEDGE-BASE-VERSION-UNAVAILABLE`、`FLG-PARSER-REVISION-UNAVAILABLE`——只表示
-覆盖缺口，S8 已规定它们**不影响 `verdict`**，可以与 `passed` 并存。不单列出来，判定表会
-把它们算进「存在任一 FLG-\*」，而 `server_version`、`parser_revision` 在当前运行时恒为
-取不到值，`passed` 就永远拿不到。`FLG-JURISDICTION-UNDETERMINED` 不在此列，结论至多 `conditional`。
-
-**跨字段一致性检查（出具前必须执行）**：`verdict: passed` 时不得留下任何影响结论的 `FLG-*`；
+**跨字段一致性检查（出具前必须执行）**：`verdict: passed` 时不得留下四类 S8
+非门禁例外之外的任何 `FLG-*`；
 `verdict: conditional` 时每条影响结论的 `FLG-*` 都必须有匹配的 `handoff.pending`；
 其中 R9 必须严格使用 `PEND-001` 和 `must_escalate: true`。`verdict: blocked` 时
 `handoff.to` 必须为 `null`，即使同时存在 `FLG-*` 也不得交接。
 
-### 三态各自的下游语义（不可混淆）
+### 三态交回 Lead 后的语义（不可混淆）
 
 | verdict | 流水线动作 | 常见误判 |
 |---|---|---|
-| `passed` | 正常交接，下游全量执行 | 因 `SCOPE-*` 误降为 `conditional` |
-| `conditional` | **照常交接、照常全量执行下游**，只是带着 `pending` 项 | 误当成"暂停"或"部分执行"而中断流水线 —— **这同样是失败** |
+| `passed` | 正常交回 Lead，由 Lead 继续 O2–O5 | 因 `SCOPE-*` 误降为 `conditional` |
+| `conditional` | **照常交回 Lead**并携带 `pending`，由 Lead 保持后续范围 | 误当成"暂停"或"部分执行"而中断流水线 —— **这同样是失败** |
 | `blocked` | **终止**，不交接、不输出条款清单与风险清单 | 输出"注意上述风险后继续审查"并给出完整结论 —— **等同于没有阻断，判失败** |
 
 > ⚠️ `conditional` **不是**弱化版的 `blocked`。它的语义是"带标继续"。
@@ -850,8 +884,9 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 
 **结论为 `conditional` 时的强制动作**
 
-1. 照常交接给下游，`handoff.to` 正常填写。
-2. 每条影响结论的 `FLG-*` 都进 `handoff.pending`，写清 `required_downstream_action`。
+1. 照常交回 Lead，`handoff.to: contract-review-lead`。
+2. 每条影响结论的 `FLG-*` 都进 `handoff.pending`，写清 `required_downstream_action`；四类 S8
+   非门禁例外只作为覆盖缺口留白，不得伪装成业务 pending。
 3. **不得**以任何形式暂停或缩减下游范围。
 
 ---
@@ -861,21 +896,30 @@ S1–S8 全部执行完毕后按下表**机械**判定，不做主观权衡：
 ### 落盘位置
 
 ```
-<有效工作目录>/contract-review/<contract_object_id>/intake/<intake_id>.receipt.yaml
+<canonical_artifact_root>/intake/<intake_id>.receipt.yaml
+<canonical_artifact_root>/intake/<intake_id>.detail.yaml
+<canonical_artifact_root>/intake/<intake_id>.validation.json
 ```
 
-`<有效工作目录>` 取当前会话的工作目录，**用 `Ls` 实际确认后使用绝对路径**，
-不要在提示词或产物里写死任何用户主目录字面量。旧回执**保留不覆盖**——
+`canonical_artifact_root` 由 Lead 明确提供，不从 cwd 猜测，也不重复拼接案件根目录；POSIX 路径、Windows 盘符路径或 UNC 路径均以运行环境实际返回的绝对路径为准，相对路径一律拒绝。使用 Write 实际返回的绝对路径并 Read 回读。旧回执**保留不覆盖**——
 规则更新后要靠它们做历史回放与差异对比。
 
-### 回执完整结构
+### 机器回执与详细事实必须分别可读取
+
+`<intake_id>.receipt.yaml` 是唯一机器交接回执：先读取本技能 `schemas/intake-receipt.schema.json`，严格采用其扁平顶层结构，不再用下面详细事实示例的 `contract_intake_receipt` 外包层。必需字段是 schema_version、intake_id、case_id、object、verdict、party_assessments、freeze、conclusions、checks、blocks、flags、scope_facts、capability_status、serialization_status、handoff。object 采用 object_id/version/source_path/digest_status 以及实际可得的完整 sha256；冻结键使用 main_version/attachment_manifest/pagination/execution_status，各含 frozen/source_scope/basis。conclusions 显式记录两个 allowed 值；不可从 schema 有效推导业务结论。
+
+详细原文、签章证据、四元组、版本矩阵、补料动作及下列详细结构写入同目录新建的 `<intake_id>.detail.yaml`，不以机器接口的简化字段替代业务知识。Lead 必须收到两份文件的实际绝对路径。机器 finding.id 对应详细 finding.code；source_scope 保留详细记录的实际文件、页段或行号，action 保留原纠正动作；有原文时填 quote，缺失项填真实 search_patterns，不同时伪造两者。S1–S8 的 source_scope/action 不能用固定样例代替实际检查。
+
+机器文件完成后 Write→完整 Read→StructuredFileValidate，真实参数为 document_path、schema_path、format。对完整回读字节和完整 schema 字节分别计算 SHA-256，必须与真实工具报告的 `document_sha256`、`schema_sha256` 完全一致，并记录工具报告的 `report_sha256`；任何不一致均失败关闭并保留诊断。只有工具调用 `success:true`、报告结构完整、摘要绑定且报告 `valid:true` 才可继续按 verdict 判断交接；`success:false` 与 `valid:false` 是不同失败类别。另写 `<intake_id>.validation.json` sidecar，不自引用，也不回写受校验文件；固定记录 `sidecar_version`、`intake_id`、document 的实际绝对 `path`/`sha256`/`format`、schema 的实际绝对 `path`/`sha256`、`tool_success`、`validator_report_sha256`、`schema_valid` 与 `diagnostics`，不得复制业务 `verdict`。sidecar 只是基于受信工具返回的审计记录，不是工具来源、有效性的自签或自主授权。原机器文件的 serialization_status 也不是有效性的自我证明。校验失败保留文件与诊断，给 Lead 返回失败状态及路径，不启动下游、不把工具失败改成合同 conditional。重新生成必须使用非空新 intake_id 和规范化后不同的新 run 根，再完整校验；旧 receipt 的完整摘要作为前序引用且必须精确匹配，原文件字节不动。
+
+### 详细事实结构（业务记录示意，不是机器回执模板）
 
 ```yaml
 contract_intake_receipt:
   intake_id: INTAKE-20260331-7f3a2c9b
   intake_at: 2026-03-31T09:12:04+08:00
   executed_by: contract-intake          # 执行 Agent
-  skill: contract-intake-gate@1.0.4
+  skill: contract-intake-gate@<本技能 frontmatter 的 version>   # 照实填写，不照抄示例
   verdict: blocked                      # passed | conditional | blocked
   verdict_label: 拒绝                   # 通过 | 条件通过 | 拒绝；必须与 verdict 对应
   verdict_basis: "命中 5 类阻断：placeholder-unfilled(×9) / page-discontinuity / attachment-missing / version-mismatch / party-name-inconsistency"
@@ -919,8 +963,8 @@ contract_intake_receipt:
 
   remediation:                          # 补齐清单（祈使句）
     - 补齐第 3 页原件，使正文页码构成连续的 1–8
-    - 填入合同总价款（4.1，第 3 页），小写与大写一致
-    - 补入附件三《验收标准》并登记进附件清单（13.3，第 7 页）
+    - 填入合同总价款（4.1，第 4 页），小写与大写一致
+    - 补入附件三《验收标准》并登记进附件清单（13.3，第 8 页）
     - 统一附件二版本标识：正文 1.2 为 V1.3，清单 13.3 为 V1.1
     - 将 10.4 的接收主体更正为甲方全称「云梯信息技术（示例）有限公司」
 
@@ -945,7 +989,7 @@ contract_intake_receipt:
   action: 补入附件三《验收标准》，并在附件清单中登记编号、名称与版本标识   # ④ 对应动作
 ```
 
-条款命中但页码不可得时：`page: null` + `FLG-CLAUSE-NO-PAGE`，并在 `locator` 给出可定位的行/段引用。
+条款命中但页码不可得时分两种：按共享规则第四节本来就没有页码的位置（如正文最后一处页码行之后的附件清单表），写 `page: unknown` 加行号 `locator`，不记 FLAG；有页码体系、却定位不到页的条款，写 `page: unknown` + `FLG-CLAUSE-NO-PAGE`，并在 `locator` 给出可定位的行/段引用。
 
 ---
 
@@ -955,7 +999,7 @@ contract_intake_receipt:
 
 ```yaml
 handoff:
-  to: clause-extractor                  # verdict 为 blocked 时必须为 null
+  to: contract-review-lead              # verdict 为 blocked 或机器回执无效时必须为 null
   from: contract-intake
   intake_id: INTAKE-20260331-7f3a2c9b
   receipt_path: /abs/path/.../INTAKE-20260331-7f3a2c9b.receipt.yaml
@@ -966,13 +1010,13 @@ handoff:
     submission_mode: version_comparison
     versions: [C06a-saas-v1, C06b-saas-v2]
 
-  confirmed:                            # 已确认事项（下游可直接当作事实使用）
+  confirmed:                            # 有来源的事实候选；后续成员仍须回源
     - 主版本已冻结：合同编号 YCIT-SAAS-2025-0206，正文共 7 页，页码 1–7 连续
     - 附件清单已冻结：附件一 V1.0、附件二 SLA-v1.2、附件三 V1.0，编号与名称在正文引用中一致
     - 签章字段已冻结：双方文本声明的公章 + 授权代表签字 + 职务 + 签署日期 2025-11-03 齐备（declared_in_text；未做图像或电子签真实性验证）
     - 无占位符、无空字段
     - 主体名称全文一致，无角色冲突
-    - 法域线索：准据法为中国法（16.1，第 6 页），规则包 cn-v3 匹配
+    - 法域线索：准据法为中国法（16.1，第 7 页），规则包 cn-v3 匹配
 
   pending:                              # 待确认项（下游不得自行消化）
     - id: PEND-002
@@ -981,7 +1025,7 @@ handoff:
       statement: 附件二由 SLA-v1.2 替换为 SLA-v2.0（文档编号 YCIT-DOC-SLA-v1.2 → YCIT-DOC-SLA-v2.0）；
         正文逐字相同（body_diff_count=0），**不得据此判定两版一致**
       required_downstream_action: 对附件二正文做实质条款对比，并给出风险变化方向（上升 / 下调 / 持平）
-      evidence: {part: body, page: 7, quote: "附件二 | 服务水平协议 | SLA-v2.0 | YCIT-DOC-SLA-v2.0"}
+      evidence: {part: body, page: unknown, locator: "行 160（正文最后一处页码行第 151 行之后的附件清单表）", quote: "附件二 | 服务水平协议 | SLA-v2.0 | YCIT-DOC-SLA-v2.0"}
     - id: PEND-003
       from_flag: SCOPE-ATTACHMENT-BODY-ABSENT
       must_escalate: false
@@ -1008,12 +1052,13 @@ handoff:
     - 任何未经 evidence 锚定的判断
 ```
 
-**交接方式**：用 `Delegate`（`mode: sync`）把上面的 YAML 块作为 `context` 传给
-`handoff.to`。引用的所有文件必须写**绝对路径**——下游 Agent 的工作目录与你不同。
+**交接方式**：只返回 Lead 可读取的回执绝对路径与上述 handoff；本成员不调用 Delegate 或 SendMessage，不自行启动 O2–O5。引用的所有文件必须写**绝对路径**。
 
 ---
 
 ## 自检清单（出具回执前逐条确认）
+
+收到任何补料、替换页、附件、澄清或新版本后，必须生成新的 `intake_id` 并从 S1 到 S8 全量重跑；旧回执保留，不得覆盖、拼接或作为新材料的通过证明。
 
 **完整性**
 
@@ -1064,3 +1109,5 @@ handoff:
 
 - [ ] 回执落盘用的是实际确认过的绝对路径，没有写死用户主目录字面量
 - [ ] 旧回执未被覆盖，本次是新的 `intake_id`
+
+---

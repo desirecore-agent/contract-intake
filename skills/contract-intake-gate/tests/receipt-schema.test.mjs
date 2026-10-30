@@ -1,11 +1,5 @@
-// schemas/intake-receipt.schema.json 的契约测试。
-//
-// 这份 Schema 由 SKILL.md 前置规则第 6 条交给 StructuredFileValidate 使用，所以这里的
-// Ajv 选项与 YAML 解析参数刻意照抄平台校验器（desirecore
-// packages/agent-service/src/structured-file-validate/validator.ts）：本地通过、平台拒收的
-// Schema 会让 intake 永远走兜底分支，重新回到「passed 不可达」。
 import assert from 'node:assert/strict'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -14,10 +8,11 @@ import YAML from 'yaml'
 
 const testsDir = path.dirname(fileURLToPath(import.meta.url))
 const skillDir = path.dirname(testsDir)
-const fixturesDir = path.join(testsDir, 'fixtures')
 
 function parseLikePlatform(text) {
-  const documents = YAML.parseAllDocuments(text, { schema: 'core', strict: true, uniqueKeys: true, maxAliasCount: 0, merge: false, customTags: [] })
+  const documents = YAML.parseAllDocuments(text, {
+    schema: 'core', strict: true, uniqueKeys: true, maxAliasCount: 0, merge: false, customTags: [],
+  })
   if (documents.length !== 1 || documents[0].errors.length > 0) throw new Error('INVALID_YAML')
   return documents[0].toJS({ maxAliasCount: 0, mapAsMap: false })
 }
@@ -39,66 +34,134 @@ const validate = new Ajv({
   logger: false,
 }).compile(schema)
 
-const fixtureNames = (await readdir(fixturesDir)).filter((name) => name.endsWith('.yaml')).sort()
-const fixture = async (name) => parseLikePlatform(await readFile(path.join(fixturesDir, name), 'utf8'))
-const clone = (value) => JSON.parse(JSON.stringify(value))
+const readFixture = async (name) => parseLikePlatform(await readFile(path.join(testsDir, 'fixtures', name), 'utf8'))
 
-test('schema uses only the Draft-07 dialect the platform validator accepts', () => {
+test('schema compiles with the platform Draft-07 Ajv profile and validates the live flat receipt', async () => {
   assert.equal(schema.$schema, 'http://json-schema.org/draft-07/schema#')
+  const receipt = await readFixture('schema-valid.receipt.yaml')
+  assert.equal(validate(receipt), true, JSON.stringify(validate.errors))
+  assert.equal('contract_intake_receipt' in receipt, false, 'live machine receipt must remain flat')
 })
 
-test('every receipt fixture parses like the platform and matches the schema', async () => {
-  assert.ok(fixtureNames.length >= 8, 'fixtures went missing; this test would pass vacuously')
-  for (const name of fixtureNames) {
-    const ok = validate(await fixture(name))
-    assert.equal(ok, true, `${name}: ${JSON.stringify(validate.errors)}`)
+test('passed accepts exactly the four S8 unavailable flags and rejects a real business flag', async () => {
+  const allowed = [
+    'FLG-SKILL-VERSION-UNAVAILABLE',
+    'FLG-SERVER-VERSION-UNAVAILABLE',
+    'FLG-KNOWLEDGE-BASE-VERSION-UNAVAILABLE',
+    'FLG-PARSER-REVISION-UNAVAILABLE',
+  ]
+  for (const id of allowed) {
+    const receipt = await readFixture('schema-valid.receipt.yaml')
+    receipt.flags = [{ id, source_scope: 'runtime version matrix', action: 'record coverage debt', search_patterns: [id], gate_affecting: false }]
+    assert.equal(validate(receipt), true, `${id}: ${JSON.stringify(validate.errors)}`)
+  }
+
+  const businessFlag = await readFixture('schema-valid.receipt.yaml')
+  businessFlag.flags = [{ id: 'FLG-JURISDICTION-UNDETERMINED', source_scope: 'governing-law search', action: 'clarify jurisdiction', search_patterns: ['governing law'], gate_affecting: true }]
+  assert.equal(validate(businessFlag), false, 'a verdict-affecting FLG must not coexist with passed')
+})
+
+test('conditional still requires a verdict-affecting flag and BLK remains dominant', async () => {
+  const conditional = await readFixture('schema-valid.receipt.yaml')
+  conditional.verdict = 'conditional'
+  conditional.flags = [{ id: 'FLG-JURISDICTION-UNDETERMINED', source_scope: 'governing-law search', action: 'clarify jurisdiction', search_patterns: ['governing law'], gate_affecting: true }]
+  assert.equal(validate(conditional), true, JSON.stringify(validate.errors))
+
+  const blocked = structuredClone(conditional)
+  blocked.blocks = [{ id: 'BLK-PLACEHOLDER', source_scope: 'price clause', action: 'fill the price', quote: 'price: ____' }]
+  blocked.verdict = 'blocked'
+  blocked.handoff.to = null
+  assert.equal(validate(blocked), true, JSON.stringify(validate.errors))
+  blocked.verdict = 'conditional'
+  assert.equal(validate(blocked), false, 'a BLK finding must force blocked')
+})
+
+test('conditional requires the canonical Lead route instead of null, blank or another member', async () => {
+  const receipt = await readFixture('schema-valid.receipt.yaml')
+  receipt.verdict = 'conditional'
+  receipt.flags = [{ id: 'FLG-PARTY-ID-ABSENT', source_scope: 'party block', action: 'request identifier', search_patterns: ['registration number'], gate_affecting: true }]
+  assert.equal(validate(receipt), true, JSON.stringify(validate.errors))
+  for (const to of [null, '', ' ', 'risk-scanner']) {
+    const bad = structuredClone(receipt)
+    bad.handoff.to = to
+    assert.equal(validate(bad), false, `conditional route ${JSON.stringify(to)} must be rejected`)
   }
 })
 
-test('free-form summary files only need legal verdict vocabulary', () => {
-  const summary = { intake: { verdict: 'blocked', verdict_label: '拒绝', blocks: [{ gate_reason_id: 'attachment-missing' }], handoff_to: null } }
-  assert.equal(validate(summary), true, JSON.stringify(validate.errors))
-  assert.equal(validate({ intake: { verdict: 'blocked', verdict_label: '条件通过' } }), false)
-})
-
-test('passed may carry S8 version-unavailable flags but no verdict-affecting flag', async () => {
-  const receipt = await fixture('complete-manifest.receipt.yaml')
-  const withCoverageGap = clone(receipt)
-  withCoverageGap.contract_intake_receipt.flags = [
-    { code: 'FLG-SERVER-VERSION-UNAVAILABLE', gate_reason_id: null, severity: 'flag' },
-    { code: 'FLG-PARSER-REVISION-UNAVAILABLE', gate_reason_id: null, severity: 'flag' },
-  ]
-  assert.equal(validate(withCoverageGap), true, JSON.stringify(validate.errors))
-
-  const withRealFlag = clone(receipt)
-  withRealFlag.contract_intake_receipt.flags = [{ code: 'FLG-JURISDICTION-UNDETERMINED', gate_reason_id: null, severity: 'flag' }]
-  assert.equal(validate(withRealFlag), false)
-})
-
-test('schema rejects receipts downstream would misread', async () => {
-  const passed = await fixture('complete-manifest.receipt.yaml')
-  const blocked = await fixture('incomplete-signature.receipt.yaml')
-  const conditional = await fixture('r02-manifest-incomplete.receipt.yaml')
-  const cases = [
-    ['非法三态字面量', passed, (r) => { r.verdict = 'pass' }],
-    ['标签与结论不对应', passed, (r) => { r.verdict_label = '条件通过' }],
-    ['blocked 仍交接', blocked, (r) => { r.handoff.to = 'clause-extractor' }],
-    ['conditional 不交接', conditional, (r) => { r.handoff.to = null }],
-    ['conditional 带阻断项', conditional, (r) => { r.blocks = [{ code: 'BLK-ATTACHMENT-MISSING', severity: 'block' }] }],
-    ['must_escalate 写成字符串', conditional, (r) => { r.handoff.pending[0].must_escalate = 'true' }],
-    ['待办编号不合规', conditional, (r) => { r.handoff.pending[0].id = 'P1' }],
-    ['判定编码不合规', conditional, (r) => { r.flags[0].code = 'flg-attachment' }],
-    ['正式回执缺 handoff', passed, (r) => { delete r.handoff }],
-  ]
-  for (const [label, base, mutate] of cases) {
-    const receipt = clone(base)
-    mutate(receipt.contract_intake_receipt)
-    assert.equal(validate(receipt), false, `${label} 应被拒绝`)
+test('S8 unavailable flags cannot become business flags by flipping their boolean', async () => {
+  const ids = ['FLG-SKILL-VERSION-UNAVAILABLE', 'FLG-SERVER-VERSION-UNAVAILABLE', 'FLG-KNOWLEDGE-BASE-VERSION-UNAVAILABLE', 'FLG-PARSER-REVISION-UNAVAILABLE']
+  const flag = (id, gate_affecting) => ({ id, gate_affecting, source_scope: 'version matrix', action: 'retain version gap', search_patterns: [id] })
+  for (const selected of [...ids.map(id => [id]), ids]) {
+    const receipt = await readFixture('schema-valid.receipt.yaml')
+    receipt.verdict = 'conditional'
+    receipt.flags = selected.map(id => flag(id, true))
+    assert.equal(validate(receipt), false, `coverage-only conditional must fail: ${selected}`)
   }
+  const mixed = await readFixture('schema-valid.receipt.yaml')
+  mixed.verdict = 'conditional'
+  mixed.flags = [...ids.map(id => flag(id, false)), flag('FLG-PARTY-ID-ABSENT', true)]
+  assert.equal(validate(mixed), true, JSON.stringify(validate.errors))
+  mixed.flags[0].gate_affecting = true
+  assert.equal(validate(mixed), false, 'real business debt must not hide a mislabeled coverage flag')
+  mixed.flags[0].gate_affecting = false
+  mixed.blocks = [{ id: 'BLK-PLACEHOLDER', source_scope: 'price', action: 'fill price', quote: '____' }]
+  mixed.verdict = 'blocked'
+  mixed.handoff.to = null
+  assert.equal(validate(mixed), true, JSON.stringify(validate.errors))
 })
 
-test('an unquoted colon inside a scalar is a parse error, not a warning', () => {
-  // 2026-09-29 真机：intake.yaml 第 164 行写成 `quote: yaml_unverified: true`，整份文件读不出来。
+test('strict platform YAML parser rejects malformed scalars and duplicate keys', () => {
   assert.throws(() => parseLikePlatform('evidence:\n  quote: yaml_unverified: true\n'), /INVALID_YAML/)
+  assert.throws(() => parseLikePlatform('verdict: passed\nverdict: blocked\n'), /INVALID_YAML/)
   assert.deepEqual(parseLikePlatform("evidence:\n  quote: 'yaml_unverified: true'\n"), { evidence: { quote: 'yaml_unverified: true' } })
+})
+
+test('skill keeps validator failure separate from the business verdict', async () => {
+  const skill = await readFile(path.join(skillDir, 'SKILL.md'), 'utf8')
+  assert.match(skill, /工具失败属于 capability\/serialization debt，不伪装成合同 FLG 或自动把合同 verdict 降为 conditional/)
+  assert.match(skill, /不启动下游、不把工具失败改成合同 conditional/)
+  assert.match(skill, /document_sha256/)
+  assert.match(skill, /schema_sha256/)
+})
+
+test('detail.yaml syntax schema compiles with the platform profile and only requires a parseable mapping', async () => {
+  const syntaxSchema = JSON.parse(await readFile(path.join(skillDir, 'schemas', 'yaml-syntax.schema.json'), 'utf8'))
+  assert.equal(syntaxSchema.$schema, 'http://json-schema.org/draft-07/schema#')
+  const validateSyntax = new Ajv({
+    strictSchema: true, allowMatchingProperties: true, strictRequired: false, strictTypes: false,
+    validateSchema: true, allErrors: false, coerceTypes: false, useDefaults: false, removeAdditional: false,
+    addUsedSchema: false, inlineRefs: false, validateFormats: false, logger: false,
+  }).compile(syntaxSchema)
+  const detail = parseLikePlatform("contract_intake_receipt:\n  verdict: conditional\n  verdict_label: 条件通过\n  evidence:\n    quote: '付款条件：验收后 30 日'\n")
+  assert.equal(validateSyntax(detail), true, JSON.stringify(validateSyntax.errors))
+  assert.equal(validateSyntax(parseLikePlatform('- 只是一个列表\n')), false, 'detail must be a mapping')
+  assert.throws(() => parseLikePlatform('evidence:\n  quote: 付款条件: 验收后 30 日\n'), /INVALID_YAML/)
+})
+
+test('skill validates detail.yaml syntax and keeps verdict_label out of the flat receipt', async () => {
+  const skill = await readFile(path.join(skillDir, 'SKILL.md'), 'utf8')
+  assert.match(skill, /schemas\/yaml-syntax\.schema\.json/)
+  assert.match(skill, /detail 校验失败记 serialization 欠账/)
+  assert.match(skill, /`verdict_label` 只写在 `detail\.yaml`/)
+  const receipt = await readFixture('schema-valid.receipt.yaml')
+  assert.equal(validate(receipt), true, JSON.stringify(validate.errors))
+  assert.equal(validate({ ...receipt, verdict_label: '通过' }), false, 'flat receipt schema must reject verdict_label')
+})
+
+test('schema keeps the main-branch code formats and routes a valid passed receipt to the Lead', async () => {
+  const receipt = await readFixture('schema-valid.receipt.yaml')
+  assert.equal(validate(receipt), true, JSON.stringify(validate.errors))
+  const mutate = (fn) => { const copy = structuredClone(receipt); fn(copy); return copy }
+  if (receipt.verdict === 'passed' && receipt.serialization_status === 'valid') {
+    assert.equal(validate(mutate((r) => { r.handoff.to = null })), false, 'passed + valid serialization must not return a null route')
+    assert.equal(validate(mutate((r) => { r.handoff.to = 'risk-scanner' })), false, 'passed must return to the Lead, not another member')
+  }
+  assert.equal(validate(mutate((r) => { r.handoff.pending = [{ id: 'P1', source_scope: 'x', action: 'y' }] })), false, 'pending ids follow PEND-<n>')
+  assert.equal(validate(mutate((r) => { r.handoff.pending = [{ id: 'PEND-001', source_scope: 'x', action: 'y' }] })), true, JSON.stringify(validate.errors))
+  const blocked = mutate((r) => { r.verdict = 'blocked'; r.handoff.to = null; r.blocks = [{ id: 'flg-attachment', source_scope: 'x', action: 'y', quote: 'z' }] })
+  assert.equal(validate(blocked), false, 'blocks only accept BLK-* codes')
+  blocked.blocks[0].id = 'BLK-ATTACHMENT-MISSING'
+  assert.equal(validate(blocked), true, JSON.stringify(validate.errors))
+  const flagged = mutate((r) => { r.verdict = 'conditional'; r.handoff.to = 'contract-review-lead'; r.flags = [{ id: 'BLK-PARTY-INCONSISTENT', source_scope: 'x', action: 'y', quote: 'z', gate_affecting: true }] })
+  assert.equal(validate(flagged), false, 'flags only accept FLG-* codes')
 })

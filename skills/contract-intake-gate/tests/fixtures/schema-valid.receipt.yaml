@@ -1,0 +1,52 @@
+schema_version: bounded-local-draft7-v1
+intake_id: INTAKE-SCHEMA-VALID
+case_id: C-SCHEMA
+object:
+  object_id: OBJ-1
+  version: v1
+  source_path: /workspace/contracts/example.md
+  digest_status: verified
+  sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+verdict: passed
+party_assessments:
+  - party_id: PARTY-CUSTOMER
+    party_role: customer
+    role_source: "party block: 甲方（客户）"
+    identifier_applicability: required
+    identifier_status: present
+    identifier_value: "91310000EXAMPLE01"
+    basis: "mainland-China main contracting party"
+  - party_id: PARTY-WITNESS
+    party_role: witness
+    role_source: "signature block: 见证人"
+    identifier_applicability: not_applicable
+    identifier_status: unknown
+    basis: "witness is not a contracting main party for S7 identifier gating"
+freeze:
+  main_version: {frozen: true, source_scope: delivered main document, basis: object id and full digest fixed}
+  attachment_manifest: {frozen: true, source_scope: attachment list, basis: authoritative list obtained}
+  pagination: {frozen: true, source_scope: all delivered pages, basis: page sequence checked}
+  execution_status: {frozen: true, source_scope: signature blocks, basis: textual fields assessed without authenticity claim}
+conclusions:
+  consistency_conclusion_allowed: true
+  compliance_conclusion_allowed: false
+checks:
+  - {id: S1, status: pass, source_scope: delivered inventory, action: retain inventory}
+  - {id: S2, status: pass, source_scope: source bytes, action: retain frozen identity}
+  - {id: S3, status: pass, source_scope: all delivered pages, action: retain pagination result}
+  - {id: S4, status: pass, source_scope: body and attachment manifest, action: retain attachment result}
+  - {id: S5, status: pass, source_scope: signature blocks, action: retain textual status}
+  - {id: S6, status: pass, source_scope: entire delivered document, action: retain placeholder result}
+  - {id: S7, status: pass, source_scope: all identified parties, action: retain identity result}
+  - {id: S8, status: pass, source_scope: request and version metadata, action: retain scope result}
+blocks: []
+flags: []
+scope_facts: []
+capability_status: ready
+serialization_status: valid
+handoff:
+  to: contract-review-lead
+  from: contract-intake
+  confirmed: []
+  pending: []
+  scope: {in_scope: [text_review], out_of_scope: []}

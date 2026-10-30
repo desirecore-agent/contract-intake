@@ -1,0 +1,25 @@
+scenarios:
+  - id: explicit-negotiation-draft
+    request_evidence: '用户：仅审谈判文本，不验证签署或生效'
+    material_evidence: '用户：将 /workspace/contracts/draft.md 指定为本轮 negotiation_draft'
+    other_gate_flags: []
+    verdict: passed
+    waived: [S5-signature-only, S6-duplicate-signature-placeholder]
+  - id: explicit-draft-with-amount-conflict
+    request_evidence: '用户：仅审谈判文本，不验证签署或生效'
+    material_evidence: '用户：将 /workspace/contracts/draft.md 指定为本轮 negotiation_draft'
+    other_gate_flags: [FLG-AMOUNT-IN-WORDS-MISMATCH]
+    verdict: conditional
+    waived: [S5-signature-only, S6-duplicate-signature-placeholder]
+  - id: implicit-unsigned-c08-like
+    request_evidence: unknown
+    material_evidence: unknown
+    other_gate_flags: []
+    verdict: blocked
+    waived: []
+  - id: explicit-draft-with-missing-party-id
+    request_evidence: '用户：仅审谈判文本，不验证签署或生效'
+    material_evidence: '用户：将 /workspace/contracts/draft.md 指定为本轮 negotiation_draft'
+    other_gate_flags: [FLG-PARTY-ID-ABSENT]
+    verdict: conditional
+    waived: [S5-signature-only, S6-duplicate-signature-placeholder]
